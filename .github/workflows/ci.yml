@@ -35,6 +35,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Django system check
         run: python manage.py check
+      - name: Migrations match the models
+        run: python manage.py makemigrations --check --dry-run -v 3
       - name: Apply migrations
         run: python manage.py migrate --noinput
       - name: Run tests
