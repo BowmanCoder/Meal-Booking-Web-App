@@ -6,71 +6,20 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
 
-# Create your models here.
-
-
 class MealUserManager(BaseUserManager):
-    def create_user(
-        self,
-        email,
-        date_of_birth,
-        fullname,
-        username,
-        contact,
-        gender,
-        address,
-        password=None,
-        password2=None,
-    ):
-        """
-        Creates and saves a User with the given above
-        """
+    def create_user(self, email, fullname="", password=None, **extra_fields):
         if not email:
             raise ValueError("Users must have an email address")
-
-        user = self.model(
-            email=self.normalize_email(email),
-            date_of_birth=date_of_birth,
-            fullname=fullname,
-            username=username,
-            contact=contact,
-            gender=gender,
-            address=address,
-        )
-
+        # Emails are stored lower-case so login is not case-sensitive.
+        user = self.model(email=email.strip().lower(), fullname=fullname, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(
-        self,
-        email,
-        date_of_birth,
-        fullname,
-        username,
-        contact,
-        gender,
-        address,
-        password=None,
-    ):
-        """
-        Creates and saves a superuser with the given email, date of
-        birth and password.
-        """
-        user = self.create_user(
-            email,
-            password=password,
-            date_of_birth=date_of_birth,
-            fullname=fullname,
-            username=username,
-            contact=contact,
-            gender=gender,
-            address=address,
-        )
-        user.is_admin = True
-        user.role = Role.ADMIN
-        user.save(using=self._db)
-        return user
+    def create_superuser(self, email, fullname="", password=None, **extra_fields):
+        extra_fields.setdefault("is_admin", True)
+        extra_fields.setdefault("role", Role.ADMIN)
+        return self.create_user(email, fullname=fullname, password=password, **extra_fields)
 
 
 class Role(models.TextChoices):
@@ -88,17 +37,11 @@ class DietaryPreference(models.TextChoices):
 
 class MealUser(AbstractBaseUser):
     fullname = models.TextField()
-    username = models.TextField()
     email = models.EmailField(
         verbose_name="email",
         max_length=255,
         unique=True,
     )
-    date_of_birth = models.DateField()
-
-    contact = models.CharField(max_length=10)
-    gender = models.TextField()
-    address = models.TextField()
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE)
     dietary_preference = models.CharField(
         max_length=20,
@@ -113,14 +56,7 @@ class MealUser(AbstractBaseUser):
     objects = MealUserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = [
-        "username",
-        "date_of_birth",
-        "fullname",
-        "contact",
-        "gender",
-        "address",
-    ]
+    REQUIRED_FIELDS = ["fullname"]
 
     def __str__(self):
         return self.email

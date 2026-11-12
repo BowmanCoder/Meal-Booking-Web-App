@@ -44,6 +44,9 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
 
+# Where the React app is served. Used to build links in emails.
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
 
 # Application definition
 
