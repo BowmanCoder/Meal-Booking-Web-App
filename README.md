@@ -6,7 +6,7 @@ An employee meal booking web app. Employees pre-book canteen meals, the kitchen 
 
 ## Tech stack
 
-- **Backend:** Django, Django REST Framework, SimpleJWT (JWT auth), SQLite for local development
+- **Backend:** Django 5.2 (LTS), Django REST Framework, SimpleJWT (JWT auth), SQLite for local development
 - **Frontend:** React 18, Redux Toolkit / RTK Query, MUI
 
 ## Run it locally
