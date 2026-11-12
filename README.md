@@ -33,6 +33,25 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 
 With no SMTP credentials in `.env`, emails such as password reset links are printed to the server console.
 
+Run the backend tests with `python manage.py test`.
+
+### API overview
+
+All endpoints are under `/api/` and need a JWT access token (`Authorization: Bearer <token>`), except register, login and password reset.
+
+| Endpoint | Who | What |
+|---|---|---|
+| `POST register/`, `POST login/` | anyone | Create an account, get tokens |
+| `GET profile/` | signed in | Your account, role and dietary preference |
+| `GET meals/` | signed in | Meal slots and their booking cut-offs |
+| `GET menus/?date_from=&date_to=` | signed in | What is being served |
+| `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus |
+| `GET bookings/` | signed in | Your bookings (staff and admins see everyone's) |
+| `POST bookings/` | signed in | Book `{meal, date}` or `{meal, start_date, end_date}`, optional `guest_name` |
+| `DELETE bookings/<id>/` | owner, admin | Cancel before the cut-off |
+
+Booking rules enforced by the server: one own booking per person, date and meal; no bookings or cancellations after the meal's cut-off; redeemed bookings cannot be cancelled.
+
 ### Frontend
 
 ```bash

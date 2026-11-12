@@ -1,5 +1,5 @@
 from django.contrib import admin
-from base.models import MealUser, Uni
+from base.models import Booking, Meal, MealUser, Menu
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 # Register your models here.
@@ -18,9 +18,10 @@ class UserModelAdmin(BaseUserAdmin):
         "contact",
         "gender",
         "address",
+        "role",
         "is_admin",
     ]
-    list_filter = ["is_admin"]
+    list_filter = ["role", "is_admin"]
     fieldsets = [
         ("User Credentials", {"fields": ["email", "password"]}),
         (
@@ -36,7 +37,8 @@ class UserModelAdmin(BaseUserAdmin):
                 ]
             },
         ),
-        ("Permissions", {"fields": ["is_admin"]}),
+        ("Preferences", {"fields": ["dietary_preference"]}),
+        ("Permissions", {"fields": ["role", "is_admin"]}),
     ]
     # add_fieldsets is not a standard ModelAdmin attribute. UserModelAdmin
     # overrides get_fieldsets to use this attribute when creating a user.
@@ -67,4 +69,24 @@ class UserModelAdmin(BaseUserAdmin):
 # Now register the new UserModelAdmin...
 admin.site.register(MealUser, UserModelAdmin)
 
-admin.site.register(Uni)
+
+
+@admin.register(Meal)
+class MealAdmin(admin.ModelAdmin):
+    list_display = ["name", "serve_time", "cutoff_time", "cutoff_days_before", "is_active"]
+
+
+@admin.register(Menu)
+class MenuAdmin(admin.ModelAdmin):
+    list_display = ["date", "meal", "description"]
+    list_filter = ["meal"]
+    date_hierarchy = "date"
+
+
+@admin.register(Booking)
+class BookingAdmin(admin.ModelAdmin):
+    list_display = ["date", "meal", "user", "guest_name", "redeemed_at", "created_at"]
+    list_filter = ["meal"]
+    date_hierarchy = "date"
+    search_fields = ["user__email", "guest_name", "coupon_code"]
+    readonly_fields = ["coupon_code", "created_at"]

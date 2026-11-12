@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from base.models import MealUser, Uni
+from base.models import MealUser
 from xml.dom import ValidationErr
 from .utils import Util
 from django.core.mail import send_mail
@@ -66,6 +66,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "email",
             "username",
             "fullname",
+            "role",
+            "dietary_preference",
         ]
 
 
@@ -157,20 +159,3 @@ class UserPasswordResetSerializer(serializers.Serializer):
         except DjangoUnicodeDecodeError as identifier:
             PasswordResetTokenGenerator().check_token(user, token)
             raise ValidationErr("Either token has expired or it is inalid")
-
-
-class BookingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Uni
-        fields = "__all__"
-
-    # def validate(self, attrs):
-    #     startdate = attrs.get("startdate")
-    #     enddate = attrs.get("enddate")
-    #     if startdate and enddate:
-    #         if startdate > enddate:
-    #             raise serializers.ValidationError("Invalid Booking Term")
-    #         return attrs
-
-    # def create(self, validate_data):
-    #     return Uni.objects.create_user(**validate_data)
