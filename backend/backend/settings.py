@@ -14,20 +14,35 @@ from pathlib import Path
 from datetime import timedelta
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Local settings live in backend/.env (never committed). See .env.example.
+load_dotenv(BASE_DIR / ".env")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-9yu^8!0xi3y9!9axdy&9q%$m_u8r#3o%r$%!760k-()w#h++=+"
+def env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+def env_list(name):
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+
+
+# Off unless explicitly enabled, so a missing .env can never expose debug pages.
+DEBUG = env_bool("DJANGO_DEBUG", False)
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY is not set. Copy backend/.env.example to backend/.env "
+        "and fill it in."
+    )
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
 
 
 # Application definition
@@ -65,7 +80,8 @@ MIDDLEWARE = [
 
 PASSWORD_RESET_TIMEOUT = 900  # SECONDS
 
-CORS_ALLOW_ALL_ORIGINS = True
+# Browser origins allowed to call the API (the React app).
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 
 ROOT_URLCONF = "backend.urls"
 
@@ -143,15 +159,18 @@ STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # EMAIL CONFIG
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.mail.yahoo.com"
-EMAIL_USE_TLS = True
-EMAIL_PORT = 587
-EMAIL_HOST_USER = "something@example.com"
-# os.environ.get("EMAIL_USER")
-EMAIL_HOST_PASSWORD = ""  # -your app password
-# os.environ.get("EMAIL_PASS")
-EMAIL_USE_SSL = False
+# Without SMTP credentials, emails are printed to the console (fine for local dev).
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.mail.yahoo.com")
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@bookmymeal.local")
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),

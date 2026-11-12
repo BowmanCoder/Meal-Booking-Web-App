@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Django
+*.sqlite3
+/backend/staticfiles/
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+/frontend/build/
+/frontend/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
