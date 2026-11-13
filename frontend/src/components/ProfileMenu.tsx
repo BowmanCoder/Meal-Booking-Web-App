@@ -81,7 +81,7 @@ export default function ProfileMenu() {
         onClose={() => setAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{ paper: { sx: { width: 320, maxWidth: "calc(100vw - 32px)", mt: 1, borderRadius: 4 } } }}
+        slotProps={{ paper: { sx: { width: 320, maxWidth: "calc(100vw - 32px)", mt: 1, borderRadius: "20px" } } }}
       >
         {user && (
           <Stack spacing={2.5} sx={{ p: 3 }}>

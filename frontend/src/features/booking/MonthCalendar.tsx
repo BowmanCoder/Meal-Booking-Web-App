@@ -53,7 +53,7 @@ export default function MonthCalendar({ days, month, availability, selected, ran
               onClick={() => onPick(date)}
               sx={{
                 minHeight: 44,
-                borderRadius: 2,
+                borderRadius: "10px",
                 flexDirection: "column",
                 fontSize: 15,
                 fontWeight: isSelected || booked ? 700 : 400,

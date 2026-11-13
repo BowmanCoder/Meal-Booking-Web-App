@@ -13,6 +13,8 @@ interface Props {
   mealName: string;
   menu: string | undefined;
   day: AvailabilityDay | undefined;
+  /** The booking status could not be loaded from the server. */
+  failed: boolean;
   isToday: boolean;
   busy: boolean;
   onBook: () => void;
@@ -20,7 +22,7 @@ interface Props {
 }
 
 /** One day of the week view: what is served, and the booking action for it. */
-export default function DayCard({ date, mealName, menu, day, isToday, busy, onBook, onCancel }: Props) {
+export default function DayCard({ date, mealName, menu, day, failed, isToday, busy, onBook, onCancel }: Props) {
   return (
     <Card
       component="article"
@@ -47,7 +49,7 @@ export default function DayCard({ date, mealName, menu, day, isToday, busy, onBo
       <Box>
         {!day ? (
           <Typography variant="body2" color="text.secondary">
-            Loading…
+            {failed ? "Booking unavailable" : "Loading…"}
           </Typography>
         ) : day.booking !== null && day.is_redeemed ? (
           <Typography sx={{ fontWeight: 700, color: "success.main" }}>Collected</Typography>

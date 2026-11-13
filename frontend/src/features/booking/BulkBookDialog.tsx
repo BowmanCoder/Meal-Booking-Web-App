@@ -51,7 +51,7 @@ export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
     return eachDay(first, addDays(first, 41));
   }, [month]);
 
-  const { data, isFetching } = useGetAvailabilityQuery({
+  const { data, isFetching, error: availabilityError } = useGetAvailabilityQuery({
     meal: meal.id,
     date_from: days[0],
     date_to: days[days.length - 1],
@@ -110,6 +110,11 @@ export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
       <DialogContent>
         <Stack spacing={2}>
           {error && <Alert severity="error">{errorMessage(error)}</Alert>}
+          {availabilityError && (
+            <Alert severity="error">
+              {errorMessage(availabilityError, "Open days could not be loaded. Close this and try again.")}
+            </Alert>
+          )}
 
           <ToggleButtonGroup
             exclusive

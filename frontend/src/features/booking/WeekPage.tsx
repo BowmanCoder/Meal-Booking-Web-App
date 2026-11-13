@@ -46,7 +46,7 @@ export default function WeekPage() {
   const weekEnd = addDays(weekStart, 6);
   const range = { meal: meal?.id ?? 0, date_from: weekStart, date_to: weekEnd };
   const { data: menus } = useGetMenusQuery(range, { skip: !meal });
-  const { data: availability } = useGetAvailabilityQuery(range, { skip: !meal });
+  const { data: availability, error: availabilityError } = useGetAvailabilityQuery(range, { skip: !meal });
   const [createBookings, { isLoading: booking }] = useCreateBookingsMutation();
   const [cancelBooking, { isLoading: cancelling }] = useCancelBookingMutation();
   const busy = booking || cancelling;
@@ -139,6 +139,12 @@ export default function WeekPage() {
         </Button>
       </Stack>
 
+      {availabilityError && (
+        <Alert severity="error">
+          {errorMessage(availabilityError, "Bookings could not be loaded. Please refresh the page.")}
+        </Alert>
+      )}
+
       <Box
         component="section"
         aria-label={`${meal.name} by day`}
@@ -151,6 +157,7 @@ export default function WeekPage() {
             mealName={meal.name}
             menu={menuByDate.get(date)}
             day={dayByDate.get(date)}
+            failed={Boolean(availabilityError)}
             isToday={date === today}
             busy={busy}
             onBook={() => handleBook(date)}

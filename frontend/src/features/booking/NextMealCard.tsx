@@ -3,14 +3,33 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { QRCodeSVG } from "qrcode.react";
 
-import { useGetMyBookingsQuery } from "../../api/bookingApi";
+import { useGetMealsQuery, useGetMyBookingsQuery } from "../../api/bookingApi";
+import type { Booking, Meal } from "../../api/types";
 import { formatDate, todayISO } from "../../lib/dates";
 import { primaryTint } from "../../theme";
 
+// A meal stays "next" until this long after it starts being served.
+const SERVING_WINDOW_HOURS = 2;
+
+/** True when today's serving of this meal is over, so its coupon is no longer useful. */
+function servingIsOver(booking: Booking, meals: Meal[] | undefined, today: string): boolean {
+  if (booking.date !== today) return false;
+  const meal = meals?.find((candidate) => candidate.id === booking.meal);
+  if (!meal) return false;
+  const [hours, minutes] = meal.serve_time.split(":").map(Number);
+  const end = new Date();
+  end.setHours(hours + SERVING_WINDOW_HOURS, minutes, 0, 0);
+  return new Date() > end;
+}
+
 /** The signed-in user's next uncollected meal, with its coupon. */
 export default function NextMealCard() {
-  const { data: bookings } = useGetMyBookingsQuery({ date_from: todayISO() });
-  const next = bookings?.find((booking) => !booking.is_redeemed);
+  const today = todayISO();
+  const { data: bookings } = useGetMyBookingsQuery({ date_from: today });
+  const { data: meals } = useGetMealsQuery();
+  const next = bookings?.find(
+    (booking) => !booking.is_redeemed && !servingIsOver(booking, meals, today),
+  );
   if (!next) return null;
 
   return (
@@ -19,10 +38,10 @@ export default function NextMealCard() {
       aria-label="Your next meal"
       direction={{ xs: "column", sm: "row" }}
       spacing={3}
-      sx={{ alignItems: { sm: "center" }, p: 3, borderRadius: 6, bgcolor: primaryTint }}
+      sx={{ alignItems: { sm: "center" }, p: 3, borderRadius: "24px", bgcolor: primaryTint }}
     >
       {/* A QR code stays black on white in both colour schemes so scanners can read it. */}
-      <Box sx={{ p: 1.5, bgcolor: "#FFFFFF", borderRadius: 3, lineHeight: 0, alignSelf: "flex-start" }}>
+      <Box sx={{ p: 1.5, bgcolor: "#FFFFFF", borderRadius: "12px", lineHeight: 0, alignSelf: "flex-start" }}>
         <QRCodeSVG
           value={next.coupon_code}
           size={112}
