@@ -63,8 +63,9 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 class BookingCreateSerializer(serializers.Serializer):
-    """Book one meal for a single `date`, or for every day from
-    `start_date` to `end_date`. One booking (and coupon) is created per day.
+    """Book one meal for a single `date`, for every day from `start_date` to
+    `end_date`, or for a hand-picked list of `dates`. One booking (and coupon)
+    is created per day.
 
     The booking always belongs to the signed-in user; there is no user field.
     The whole request is rejected if any day in it cannot be booked.
@@ -74,6 +75,12 @@ class BookingCreateSerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
     start_date = serializers.DateField(required=False)
     end_date = serializers.DateField(required=False)
+    dates = serializers.ListField(
+        child=serializers.DateField(),
+        required=False,
+        allow_empty=False,
+        max_length=MAX_RANGE_DAYS,
+    )
     guest_name = serializers.CharField(
         max_length=100, required=False, allow_blank=True, default=""
     )
@@ -83,27 +90,30 @@ class BookingCreateSerializer(serializers.Serializer):
         start = attrs.get("start_date")
         end = attrs.get("end_date")
 
-        if date and (start or end):
-            raise serializers.ValidationError(
-                "Send either date, or start_date and end_date, not both."
-            )
-        if date:
-            start = end = date
-        elif not (start and end):
-            raise serializers.ValidationError(
-                "Send either date, or both start_date and end_date."
-            )
-        if end < start:
-            raise serializers.ValidationError(
-                {"end_date": "End date cannot be before start date."}
-            )
+        picked = attrs.get("dates")
 
-        day_count = (end - start).days + 1
-        if day_count > MAX_RANGE_DAYS:
+        ways = [bool(date), bool(start or end), bool(picked)]
+        if sum(ways) != 1:
             raise serializers.ValidationError(
-                f"A booking can cover at most {MAX_RANGE_DAYS} days."
+                "Send exactly one of: date, start_date with end_date, or dates."
             )
-        dates = [start + timedelta(days=offset) for offset in range(day_count)]
+        if picked:
+            dates = sorted(set(picked))
+        else:
+            if date:
+                start = end = date
+            elif not (start and end):
+                raise serializers.ValidationError("Send both start_date and end_date.")
+            if end < start:
+                raise serializers.ValidationError(
+                    {"end_date": "End date cannot be before start date."}
+                )
+            day_count = (end - start).days + 1
+            if day_count > MAX_RANGE_DAYS:
+                raise serializers.ValidationError(
+                    f"A booking can cover at most {MAX_RANGE_DAYS} days."
+                )
+            dates = [start + timedelta(days=offset) for offset in range(day_count)]
 
         meal = attrs["meal"]
         closed = [d for d in dates if not meal.is_open_for(d)]
