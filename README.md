@@ -47,11 +47,13 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 | `POST resetpasswordemail/`, `POST resetpassword/<uid>/<token>/` | anyone | Request and use a password reset link |
 | `GET profile/`, `PATCH profile/` | signed in | Your account and role; edit name and dietary preference |
 | `POST changepassword/` | signed in | Needs `current_password` |
+| `POST logout/`, `POST logout-all/` | signed in | End this session, or every session on all devices |
 | `GET meals/` | signed in | Meal slots and their booking cut-offs |
 | `GET menus/?date_from=&date_to=` | signed in | What is being served |
 | `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus |
 | `GET bookings/` | signed in | Your bookings (staff and admins see everyone's) |
-| `POST bookings/` | signed in | Book `{meal, date}` or `{meal, start_date, end_date}`, optional `guest_name` |
+| `GET bookings/availability/?meal=&date_from=&date_to=` | signed in | Per day: still open, when it closes, and your own booking if any |
+| `POST bookings/` | signed in | Book `{meal, date}`, `{meal, start_date, end_date}` or `{meal, dates: [...]}`, optional `guest_name` |
 | `DELETE bookings/<id>/` | owner, admin | Cancel before the cut-off |
 | `POST bookings/redeem/` | staff, admin | Redeem a scanned `coupon_code`. Works once per coupon, on the day of the meal |
 | `GET kitchen/prep-sheet/?date=` | staff, admin | How many of each meal to prepare, split by dietary preference |
@@ -63,6 +65,10 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 **Forecast.** A simple, explainable baseline: the average bookings for the same meal on the same weekday over the last four weeks, never below what is already booked.
 
 Booking rules enforced by the server: one own booking per person, date and meal; no bookings or cancellations after the meal's cut-off; redeemed bookings cannot be cancelled.
+
+### Email reminders
+
+`python manage.py send_reminders` emails each user who has reminders on a list of tomorrow's booked meals. Run it once every evening with a scheduler. Locally, with no SMTP settings, the emails are printed to the console.
 
 ### Frontend
 
