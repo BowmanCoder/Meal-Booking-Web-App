@@ -22,8 +22,10 @@ jobs:
         working-directory: backend
     env:
       # Throwaway values for the test run only. Real secrets never live in the repo.
-      DJANGO_SECRET_KEY: ci-only-not-a-real-secret
+      DJANGO_SECRET_KEY: ci-only-not-a-real-secret-0123456789-abcdefghijklmnop
       DJANGO_DEBUG: "1"
+      # Deliberately not UTC, to prove the tests do not depend on the server time zone.
+      DJANGO_TIME_ZONE: America/Los_Angeles
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

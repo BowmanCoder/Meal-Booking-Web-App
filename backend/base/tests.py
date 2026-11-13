@@ -5,6 +5,7 @@ from unittest import mock
 
 from django.core import mail
 from django.core.management import call_command
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -25,6 +26,9 @@ def make_user(email, role=Role.EMPLOYEE, **extra):
     )
 
 
+# Pinned to UTC so the frozen clock and the cut-off times line up whatever
+# DJANGO_TIME_ZONE the developer has in their .env.
+@override_settings(TIME_ZONE="UTC")
 class FrozenTimeAPITestCase(APITestCase):
     def setUp(self):
         patcher = mock.patch("django.utils.timezone.now", return_value=NOW)
