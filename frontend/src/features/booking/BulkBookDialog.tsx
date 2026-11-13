@@ -4,9 +4,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
-import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
@@ -20,7 +18,6 @@ import {
   addMonths,
   eachDay,
   formatDate,
-  isWeekend,
   startOfMonth,
   startOfWeek,
   todayISO,
@@ -40,7 +37,6 @@ interface Props {
 export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(todayISO()));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [weekdaysOnly, setWeekdaysOnly] = useState(true);
   const [pickMode, setPickMode] = useState<PickMode>("days");
   const [rangeAnchor, setRangeAnchor] = useState<string | null>(null);
   const [createBookings, { isLoading, error }] = useCreateBookingsMutation();
@@ -62,9 +58,9 @@ export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
   );
 
   function canSelect(date: string): boolean {
+    // `is_open` is already false on days the meal is not served.
     const info = availability.get(date);
-    if (!info || !info.is_open || info.booking !== null) return false;
-    return !(weekdaysOnly && isWeekend(date));
+    return Boolean(info && info.is_open && info.booking === null);
   }
 
   function handlePick(date: string) {
@@ -83,11 +79,6 @@ export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
       setRangeAnchor(null);
     }
     setSelected(next);
-  }
-
-  function handleWeekdaysOnly(checked: boolean) {
-    setWeekdaysOnly(checked);
-    if (checked) setSelected(new Set([...selected].filter((date) => !isWeekend(date))));
   }
 
   async function handleConfirm() {
@@ -167,14 +158,9 @@ export default function BulkBookDialog({ meal, onClose, onBooked }: Props) {
             </Typography>
           )}
 
-          <FormControlLabel
-            sx={{ justifyContent: "space-between", ml: 0 }}
-            labelPlacement="start"
-            label="Weekdays only"
-            control={
-              <Switch checked={weekdaysOnly} onChange={(event) => handleWeekdaysOnly(event.target.checked)} />
-            }
-          />
+          <Typography variant="body2" color="text.secondary">
+            Greyed-out days are closed, already booked, or days {meal.name.toLowerCase()} is not served.
+          </Typography>
 
           <Typography aria-live="polite" color={tooMany ? "error" : "text.primary"} sx={{ fontWeight: 600 }}>
             {count === 0

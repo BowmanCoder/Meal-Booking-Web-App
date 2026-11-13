@@ -29,7 +29,7 @@ export const bookingApi = baseApi.injectEndpoints({
       query: (params) => ({ url: "bookings/availability/", params }),
       providesTags: ["Availability"],
     }),
-    getMyBookings: build.query<Booking[], { date_from?: string } | void>({
+    getMyBookings: build.query<Booking[], { date_from?: string; date_to?: string } | void>({
       query: (params) => ({ url: "bookings/", params: { mine: 1, ...(params ?? {}) } }),
       providesTags: ["Bookings"],
     }),

@@ -8,7 +8,10 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import ProfileMenu from "./ProfileMenu";
 
-const NAV_LINKS = [{ to: "/", label: "This week" }];
+const NAV_LINKS = [
+  { to: "/", label: "This week" },
+  { to: "/bookings", label: "My bookings" },
+];
 
 /** Page frame for signed-in screens: top bar, navigation, profile menu. */
 export default function AppShell() {

@@ -19,6 +19,7 @@ TODAY = NOW.date()
 TOMORROW = TODAY + timedelta(days=1)
 YESTERDAY = TODAY - timedelta(days=1)
 PASSWORD = "Correct-Horse-42"
+EVERY_DAY = "0123456"
 
 
 def make_user(email, role=Role.EMPLOYEE, **extra):
@@ -37,14 +38,19 @@ class FrozenTimeAPITestCase(APITestCase):
         self.addCleanup(patcher.stop)
 
         # Lunch closes at 09:30 the same day; breakfast at 20:00 the day before.
+        # Both are served every day here; ServingDayTests covers closed days.
         self.lunch = Meal.objects.create(
-            name="Lunch", serve_time=time(12, 30), cutoff_time=time(9, 30)
+            name="Lunch",
+            serve_time=time(12, 30),
+            cutoff_time=time(9, 30),
+            serving_days=EVERY_DAY,
         )
         self.breakfast = Meal.objects.create(
             name="Breakfast",
             serve_time=time(8, 0),
             cutoff_time=time(20, 0),
             cutoff_days_before=1,
+            serving_days=EVERY_DAY,
         )
         self.employee = make_user("employee@example.com")
         self.other = make_user("other@example.com")
@@ -204,6 +210,94 @@ class CreateBookingTests(FrozenTimeAPITestCase):
         self.lunch.is_active = False
         self.lunch.save()
         self.assertEqual(self.book(date=TOMORROW).status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ServingDayTests(FrozenTimeAPITestCase):
+    """NOW is Thursday 10 January 2030, so the 12th and 13th are a weekend."""
+
+    SATURDAY = TODAY + timedelta(days=2)
+    SUNDAY = TODAY + timedelta(days=3)
+    MONDAY = TODAY + timedelta(days=4)
+
+    def setUp(self):
+        super().setUp()
+        self.dinner = Meal.objects.create(
+            name="Dinner", serve_time=time(19, 30), cutoff_time=time(15, 0)
+        )
+        self.login(self.employee)
+
+    def test_meals_are_served_on_weekdays_by_default(self):
+        self.assertEqual(self.dinner.serving_days, "01234")
+        response = self.client.get(f"/api/meals/{self.dinner.id}/")
+        self.assertEqual(response.data["serving_days"], [0, 1, 2, 3, 4])
+
+    def test_a_day_the_meal_is_not_served_cannot_be_booked(self):
+        single = self.book(meal=self.dinner.id, date=self.SATURDAY)
+        picked = self.book(
+            meal=self.dinner.id, dates=[TOMORROW.isoformat(), self.SUNDAY.isoformat()]
+        )
+        self.assertEqual(single.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(picked.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Booking.objects.count(), 0)
+
+    def test_a_range_skips_days_the_meal_is_not_served(self):
+        response = self.book(meal=self.dinner.id, start_date=TOMORROW, end_date=self.MONDAY)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        booked = list(Booking.objects.order_by("date").values_list("date", flat=True))
+        self.assertEqual(booked, [TOMORROW, self.MONDAY])
+
+    def test_a_range_with_no_serving_days_is_rejected(self):
+        response = self.book(
+            meal=self.dinner.id, start_date=self.SATURDAY, end_date=self.SUNDAY
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_availability_marks_days_not_served(self):
+        url = (
+            f"/api/bookings/availability/?meal={self.dinner.id}"
+            f"&date_from={TOMORROW.isoformat()}&date_to={self.SATURDAY.isoformat()}"
+        )
+        friday, saturday = self.client.get(url).data["days"]
+        self.assertTrue(friday["is_served"])
+        self.assertTrue(friday["is_open"])
+        self.assertFalse(saturday["is_served"])
+        self.assertFalse(saturday["is_open"])
+
+    def test_admin_can_open_the_canteen_at_weekends(self):
+        self.login(self.admin)
+        response = self.client.patch(
+            f"/api/meals/{self.dinner.id}/", {"serving_days": [5, 0, 1, 5]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.dinner.refresh_from_db()
+        self.assertEqual(self.dinner.serving_days, "015")
+        bad = self.client.patch(
+            f"/api/meals/{self.dinner.id}/", {"serving_days": [7]}, format="json"
+        )
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_booking_on_a_day_later_closed_can_still_be_cancelled(self):
+        booking = Booking.objects.create(user=self.employee, meal=self.dinner, date=self.MONDAY)
+        self.dinner.serving_days = "1234"  # the admin stops serving on Mondays
+        self.dinner.save()
+        response = self.client.delete(f"/api/bookings/{booking.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_forecast_leaves_out_days_not_served(self):
+        self.login(self.staff)
+        response = self.client.get("/api/kitchen/forecast/?days=7")
+        dinner_days = [row["date"] for row in response.data["days"] if row["meal_name"] == "Dinner"]
+        self.assertNotIn(self.SATURDAY, dinner_days)
+        self.assertNotIn(self.SUNDAY, dinner_days)
+        self.assertIn(self.MONDAY, dinner_days)
+
+    def test_booking_shows_whether_it_can_be_cancelled(self):
+        Booking.objects.create(user=self.employee, meal=self.lunch, date=TODAY)
+        early = self.client.get("/api/bookings/").data[0]
+        self.assertTrue(early["can_cancel"])
+        with mock.patch("django.utils.timezone.now", return_value=NOW.replace(hour=11)):
+            late = self.client.get("/api/bookings/").data[0]
+        self.assertFalse(late["can_cancel"])
 
 
 class ViewBookingTests(FrozenTimeAPITestCase):
@@ -789,6 +883,9 @@ class SeedDemoTests(APITestCase):
         counts = (MealUser.objects.count(), Meal.objects.count(), Menu.objects.count())
         bookings = Booking.objects.count()
         self.assertEqual(Meal.objects.count(), 3)
+        # Meals are served on weekdays, so nothing is seeded for a weekend.
+        self.assertFalse(Booking.objects.filter(date__week_day__in=[1, 7]).exists())
+        self.assertFalse(Menu.objects.filter(date__week_day__in=[1, 7]).exists())
         self.assertTrue(MealUser.objects.filter(role=Role.ADMIN).exists())
         self.assertTrue(MealUser.objects.filter(role=Role.STAFF).exists())
         self.assertGreater(bookings, 0)

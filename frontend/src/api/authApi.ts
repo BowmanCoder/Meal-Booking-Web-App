@@ -32,6 +32,12 @@ export const authApi = baseApi.injectEndpoints({
       query: (body) => ({ url: "profile/", method: "PATCH", body }),
       invalidatesTags: ["Profile"],
     }),
+    changePassword: build.mutation<
+      { msg: string },
+      { current_password: string; password: string; password2: string }
+    >({
+      query: (body) => ({ url: "changepassword/", method: "POST", body }),
+    }),
     logout: build.mutation<void, { refresh: string }>({
       query: (body) => ({ url: "logout/", method: "POST", body }),
     }),
@@ -46,6 +52,7 @@ export const {
   useRegisterMutation,
   useGetProfileQuery,
   useUpdateProfileMutation,
+  useChangePasswordMutation,
   useLogoutMutation,
   useLogoutEverywhereMutation,
 } = authApi;

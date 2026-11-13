@@ -80,7 +80,7 @@ class UserModelAdmin(BaseUserAdmin):
 
 @admin.register(Meal)
 class MealAdmin(admin.ModelAdmin):
-    list_display = ["name", "serve_time", "cutoff_time", "cutoff_days_before", "is_active"]
+    list_display = ["name", "serve_time", "cutoff_time", "cutoff_days_before", "serving_days", "is_active"]
 
 
 @admin.register(Menu)

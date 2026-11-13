@@ -136,7 +136,7 @@ class BookingViewSet(
             raise PermissionDenied("You can only cancel your own bookings.")
         if booking.is_redeemed:
             raise ValidationError("This booking has already been redeemed.")
-        if not user.is_canteen_admin and not booking.meal.is_open_for(booking.date):
+        if not user.is_canteen_admin and not booking.meal.is_before_cutoff(booking.date):
             raise ValidationError(
                 f"Cancellation for {booking.meal.name} on {booking.date.isoformat()} has closed."
             )
@@ -180,11 +180,13 @@ class BookingViewSet(
             day = date_from + timedelta(days=offset)
             cutoff = meal.cutoff_for(day)
             booking = own.get(day)
+            is_served = meal.is_served_on(day)
             days.append(
                 {
                     "date": day,
                     "cutoff": cutoff,
-                    "is_open": now < cutoff,
+                    "is_served": is_served,
+                    "is_open": is_served and now < cutoff,
                     "booking": booking.id if booking else None,
                     "is_redeemed": bool(booking and booking.is_redeemed),
                 }

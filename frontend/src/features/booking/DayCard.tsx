@@ -51,6 +51,10 @@ export default function DayCard({ date, mealName, menu, day, failed, isToday, bu
           <Typography variant="body2" color="text.secondary">
             {failed ? "Booking unavailable" : "Loading…"}
           </Typography>
+        ) : !day.is_served && day.booking === null ? (
+          <Typography variant="body2" color="text.secondary">
+            Not served
+          </Typography>
         ) : day.booking !== null && day.is_redeemed ? (
           <Typography sx={{ fontWeight: 700, color: "success.main" }}>Collected</Typography>
         ) : day.booking !== null ? (
