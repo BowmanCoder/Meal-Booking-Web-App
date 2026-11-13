@@ -1,74 +1,80 @@
+from django import forms
 from django.contrib import admin
-from base.models import Booking, Meal, MealUser, Menu
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import ReadOnlyPasswordHashField
+from django.core.exceptions import ValidationError
 
-# Register your models here.
+from base.models import Booking, Meal, MealUser, Menu
 
 
+class UserCreationForm(forms.ModelForm):
+    """Create a user in the admin, with a repeated password."""
+
+    password1 = forms.CharField(label="Password", widget=forms.PasswordInput)
+    password2 = forms.CharField(label="Password confirmation", widget=forms.PasswordInput)
+
+    class Meta:
+        model = MealUser
+        fields = ["email", "fullname", "role"]
+
+    def clean_password2(self):
+        password1 = self.cleaned_data.get("password1")
+        password2 = self.cleaned_data.get("password2")
+        if password1 and password2 and password1 != password2:
+            raise ValidationError("Passwords don't match")
+        return password2
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = user.email.strip().lower()
+        user.set_password(self.cleaned_data["password1"])
+        if commit:
+            user.save()
+        return user
+
+
+class UserChangeForm(forms.ModelForm):
+    """Edit a user in the admin. The password is shown as a read-only hash."""
+
+    password = ReadOnlyPasswordHashField()
+
+    class Meta:
+        model = MealUser
+        fields = [
+            "email",
+            "password",
+            "fullname",
+            "dietary_preference",
+            "role",
+            "is_active",
+            "is_admin",
+        ]
+
+
+@admin.register(MealUser)
 class UserModelAdmin(BaseUserAdmin):
-    # The fields to be used in displaying the User model.
-    # These override the definitions on the base UserModelAdmin
-    # that reference specific fields on auth.User.
-    list_display = [
-        "id",
-        "email",
-        "fullname",
-        "username",
-        "date_of_birth",
-        "contact",
-        "gender",
-        "address",
-        "role",
-        "is_admin",
-    ]
-    list_filter = ["role", "is_admin"]
+    form = UserChangeForm
+    add_form = UserCreationForm
+
+    list_display = ["email", "fullname", "role", "dietary_preference", "is_admin", "is_active"]
+    list_filter = ["role", "is_admin", "is_active"]
     fieldsets = [
-        ("User Credentials", {"fields": ["email", "password"]}),
-        (
-            "Personal info",
-            {
-                "fields": [
-                    "fullname",
-                    "username",
-                    "contact",
-                    "gender",
-                    "address",
-                    "date_of_birth",
-                ]
-            },
-        ),
-        ("Preferences", {"fields": ["dietary_preference"]}),
-        ("Permissions", {"fields": ["role", "is_admin"]}),
+        ("Sign in", {"fields": ["email", "password"]}),
+        ("Profile", {"fields": ["fullname", "dietary_preference"]}),
+        ("Permissions", {"fields": ["role", "is_admin", "is_active"]}),
     ]
-    # add_fieldsets is not a standard ModelAdmin attribute. UserModelAdmin
-    # overrides get_fieldsets to use this attribute when creating a user.
     add_fieldsets = [
         (
             None,
             {
                 "classes": ["wide"],
-                "fields": [
-                    "email",
-                    "username",
-                    "password1",
-                    "password2",
-                    "fullname",
-                    "contact",
-                    "gender",
-                    "address",
-                    "date_of_birth",
-                ],
+                "fields": ["email", "fullname", "role", "password1", "password2"],
             },
         ),
     ]
-    search_fields = ["email"]
-    ordering = ["email", "id"]
+    search_fields = ["email", "fullname"]
+    ordering = ["email"]
     filter_horizontal = []
-
-
-# Now register the new UserModelAdmin...
-admin.site.register(MealUser, UserModelAdmin)
-
 
 
 @admin.register(Meal)

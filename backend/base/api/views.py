@@ -60,8 +60,8 @@ class UserLoginView(APIView):
     def post(self, request, format=None):
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.data.get("email")
-        password = serializer.data.get("password")
+        email = serializer.validated_data["email"].strip().lower()
+        password = serializer.validated_data["password"]
         user = authenticate(email=email, password=password)
 
         if user is not None:
@@ -84,6 +84,12 @@ class UserProfileView(APIView):
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def patch(self, request, format=None):
+        serializer = UserProfileSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class UserChangePasswordView(APIView):
     renderer_classes = [UserRenderer]
@@ -94,6 +100,7 @@ class UserChangePasswordView(APIView):
             data=request.data, context={"user": request.user}
         )
         serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(
             {"msg": "Password Changed Successfully"}, status=status.HTTP_200_OK
         )
@@ -106,8 +113,10 @@ class SendPasswordResetEmailView(APIView):
     def post(self, request, format=None):
         serializer = SendPasswordResetEmailSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Same answer whether or not the email is registered.
         return Response(
-            {"msg": "The Password Reset Link has been sent! Check your mail ASAP!!! "},
+            {"msg": "If that email is registered, a password reset link has been sent."},
             status=status.HTTP_200_OK,
         )
 
@@ -122,6 +131,7 @@ class UserPasswordResetView(APIView):
             context={"uid": uid, "token": token},
         )
         serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(
             {"msg": "Password Reset Successfull!!! "},
             status=status.HTTP_200_OK,
