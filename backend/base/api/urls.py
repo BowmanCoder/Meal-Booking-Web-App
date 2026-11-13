@@ -5,6 +5,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .booking_views import BookingViewSet, MealViewSet, MenuViewSet
 from .kitchen_views import AttendanceView, ForecastView, PrepSheetView
 from .views import (
+    LogoutEverywhereView,
+    LogoutView,
     MyTokenObtainPairView,
     SendPasswordResetEmailView,
     UserChangePasswordView,
@@ -22,6 +24,8 @@ router.register("bookings", BookingViewSet, basename="booking")
 urlpatterns = [
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("login/", UserLoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
+    path("logout-all/", LogoutEverywhereView.as_view(), name="logout_all"),
     path("profile/", UserProfileView.as_view(), name="profile"),
     path("changepassword/", UserChangePasswordView.as_view(), name="changepassword"),
     path(

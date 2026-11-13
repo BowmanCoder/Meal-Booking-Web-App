@@ -3,7 +3,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -89,6 +91,38 @@ class UserProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    """End this session: the given refresh token can no longer be used."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            token = RefreshToken(request.data.get("refresh", ""))
+        except TokenError:
+            # Already expired or blacklisted: the session is over either way.
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if str(token.get("user_id")) == str(request.user.id):
+            token.blacklist()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class LogoutEverywhereView(APIView):
+    """End every session for this user, on all devices.
+
+    Refresh tokens stop working at once. An access token already issued stays
+    valid until it expires (at most 30 minutes), as access tokens are not
+    checked against the database.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        for token in OutstandingToken.objects.filter(user=request.user):
+            BlacklistedToken.objects.get_or_create(token=token)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserChangePasswordView(APIView):

@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -16,6 +19,8 @@ from .booking_serializers import (
     RedeemSerializer,
 )
 from .permissions import IsCanteenStaff, ReadOnlyOrCanteenAdmin
+
+MAX_AVAILABILITY_DAYS = 62
 
 REDEEM_RESPONSES = {
     kitchen.REDEEMED: (status.HTTP_200_OK, "Valid. Enjoy your meal."),
@@ -90,7 +95,8 @@ class BookingViewSet(
 ):
     """Bookings.
 
-    Employees see and cancel only their own. Canteen staff and admins see all.
+    Employees see and cancel only their own. Canteen staff and admins see all,
+    or only their own with ?mine=1.
     Filter with ?date=, ?date_from=, ?date_to= and ?meal=.
     """
 
@@ -106,7 +112,8 @@ class BookingViewSet(
     def get_queryset(self):
         user = self.request.user
         queryset = Booking.objects.select_related("meal", "user")
-        if not user.is_canteen_staff:
+        only_mine = self.request.query_params.get("mine") in ("1", "true")
+        if only_mine or not user.is_canteen_staff:
             queryset = queryset.filter(user=user)
         queryset = _filter_by_dates(queryset, self.request)
         meal = self.request.query_params.get("meal")
@@ -134,6 +141,55 @@ class BookingViewSet(
                 f"Cancellation for {booking.meal.name} on {booking.date.isoformat()} has closed."
             )
         booking.delete()
+
+    @action(detail=False, methods=["get"])
+    def availability(self, request):
+        """For one meal and a span of days: can each day still be booked, when
+        does it close, and has the caller already booked it?
+
+        GET ?meal=<id>&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD (at most 62 days).
+        The server decides what is open, so clients never have to guess its clock.
+        """
+        meal_id = request.query_params.get("meal", "")
+        meal = Meal.objects.filter(pk=meal_id, is_active=True).first() if meal_id.isdigit() else None
+        if meal is None:
+            raise ValidationError({"meal": "Must be the id of an active meal."})
+        date_from = date_param(request, "date_from")
+        date_to = date_param(request, "date_to")
+        if not (date_from and date_to):
+            raise ValidationError("date_from and date_to are required.")
+        span = (date_to - date_from).days
+        if not 0 <= span < MAX_AVAILABILITY_DAYS:
+            raise ValidationError(
+                f"date_to must be on or after date_from, at most {MAX_AVAILABILITY_DAYS} days in all."
+            )
+
+        own = {
+            booking.date: booking
+            for booking in Booking.objects.filter(
+                user=request.user,
+                meal=meal,
+                guest_name="",
+                date__gte=date_from,
+                date__lte=date_to,
+            )
+        }
+        now = timezone.now()
+        days = []
+        for offset in range(span + 1):
+            day = date_from + timedelta(days=offset)
+            cutoff = meal.cutoff_for(day)
+            booking = own.get(day)
+            days.append(
+                {
+                    "date": day,
+                    "cutoff": cutoff,
+                    "is_open": now < cutoff,
+                    "booking": booking.id if booking else None,
+                    "is_redeemed": bool(booking and booking.is_redeemed),
+                }
+            )
+        return Response({"meal": meal.id, "days": days})
 
     @action(detail=False, methods=["post"], permission_classes=[IsCanteenStaff])
     def redeem(self, request):

@@ -56,7 +56,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MealUser
-        fields = ["id", "email", "fullname", "role", "dietary_preference"]
+        fields = ["id", "email", "fullname", "role", "dietary_preference", "email_reminders"]
         read_only_fields = ["id", "email", "role"]
 
 

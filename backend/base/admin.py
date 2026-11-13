@@ -45,6 +45,7 @@ class UserChangeForm(forms.ModelForm):
             "password",
             "fullname",
             "dietary_preference",
+            "email_reminders",
             "role",
             "is_active",
             "is_admin",
@@ -60,7 +61,7 @@ class UserModelAdmin(BaseUserAdmin):
     list_filter = ["role", "is_admin", "is_active"]
     fieldsets = [
         ("Sign in", {"fields": ["email", "password"]}),
-        ("Profile", {"fields": ["fullname", "dietary_preference"]}),
+        ("Profile", {"fields": ["fullname", "dietary_preference", "email_reminders"]}),
         ("Permissions", {"fields": ["role", "is_admin", "is_active"]}),
     ]
     add_fieldsets = [

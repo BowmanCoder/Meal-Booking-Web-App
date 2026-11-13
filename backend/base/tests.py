@@ -177,6 +177,29 @@ class CreateBookingTests(FrozenTimeAPITestCase):
             self.book(start_date=TOMORROW).status_code, status.HTTP_400_BAD_REQUEST
         )
 
+    def test_book_a_list_of_picked_dates(self):
+        monday = TOMORROW + timedelta(days=3)
+        wednesday = monday + timedelta(days=2)
+        response = self.book(
+            dates=[wednesday.isoformat(), monday.isoformat(), monday.isoformat()]
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        booked = list(Booking.objects.order_by("date").values_list("date", flat=True))
+        self.assertEqual(booked, [monday, wednesday])
+
+    def test_picked_dates_follow_the_same_rules(self):
+        closed = self.book(dates=[YESTERDAY.isoformat(), TOMORROW.isoformat()])
+        self.assertEqual(closed.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Booking.objects.count(), 0)
+
+        too_many = [(TOMORROW + timedelta(days=n)).isoformat() for n in range(32)]
+        self.assertEqual(self.book(dates=too_many).status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.book(dates=[]).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_only_one_way_of_giving_dates_is_allowed(self):
+        response = self.book(date=TOMORROW, dates=[TOMORROW.isoformat()])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_inactive_meal_cannot_be_booked(self):
         self.lunch.is_active = False
         self.lunch.save()
@@ -217,6 +240,43 @@ class ViewBookingTests(FrozenTimeAPITestCase):
         self.assertEqual(self.ids(by_date), {later.id})
         by_meal = self.client.get(f"/api/bookings/?meal={self.lunch.id}")
         self.assertEqual(self.ids(by_meal), {self.mine.id, self.theirs.id})
+
+    def test_staff_can_ask_for_only_their_own(self):
+        own = Booking.objects.create(user=self.staff, meal=self.lunch, date=TOMORROW)
+        self.login(self.staff)
+        response = self.client.get("/api/bookings/?mine=1")
+        self.assertEqual(self.ids(response), {own.id})
+
+    def test_availability_shows_open_days_and_own_bookings(self):
+        self.login(self.employee)
+        url = (
+            f"/api/bookings/availability/?meal={self.lunch.id}"
+            f"&date_from={YESTERDAY.isoformat()}&date_to={TOMORROW.isoformat()}"
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        yesterday, today, tomorrow = response.data["days"]
+        self.assertFalse(yesterday["is_open"])
+        self.assertTrue(today["is_open"])  # 08:00, lunch closes 09:30
+        self.assertIsNone(today["booking"])
+        # Only the caller's own booking is reported, never someone else's.
+        self.assertEqual(tomorrow["booking"], self.mine.id)
+        self.assertFalse(tomorrow["is_redeemed"])
+
+    def test_availability_needs_a_meal_and_a_sensible_range(self):
+        self.login(self.employee)
+        base = "/api/bookings/availability/"
+        day = TOMORROW.isoformat()
+        far = (TOMORROW + timedelta(days=90)).isoformat()
+        for query in [
+            f"?date_from={day}&date_to={day}",
+            f"?meal=999&date_from={day}&date_to={day}",
+            f"?meal={self.lunch.id}&date_from={day}",
+            f"?meal={self.lunch.id}&date_from={day}&date_to={YESTERDAY.isoformat()}",
+            f"?meal={self.lunch.id}&date_from={day}&date_to={far}",
+        ]:
+            response = self.client.get(base + query)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, query)
 
     def test_bad_date_filter_is_400(self):
         self.login(self.admin)
@@ -651,6 +711,76 @@ class PasswordTests(APITestCase):
         for url in ["/api/resetpassword/not-a-uid/not-a-token/", "/api/resetpassword/OTk5/x-y/"]:
             response = self.client.post(url, body, format="json")
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, url)
+
+
+class SessionTests(APITestCase):
+    def setUp(self):
+        self.user = make_user("me@example.com")
+
+    def tokens(self):
+        response = self.client.post(
+            "/api/login/", {"email": "me@example.com", "password": PASSWORD}, format="json"
+        )
+        return response.json()["token"]
+
+    def refresh(self, refresh_token):
+        return self.client.post("/api/token/refresh/", {"refresh": refresh_token}, format="json")
+
+    def test_logout_ends_only_that_session(self):
+        phone, laptop = self.tokens(), self.tokens()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {phone['access']}")
+        response = self.client.post("/api/logout/", {"refresh": phone["refresh"]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.client.credentials()
+        self.assertEqual(self.refresh(phone["refresh"]).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.refresh(laptop["refresh"]).status_code, status.HTTP_200_OK)
+
+    def test_logout_everywhere_ends_every_session(self):
+        phone, laptop = self.tokens(), self.tokens()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {phone['access']}")
+        response = self.client.post("/api/logout-all/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.client.credentials()
+        self.assertEqual(self.refresh(phone["refresh"]).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.refresh(laptop["refresh"]).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_cannot_end_someone_elses_session(self):
+        other = make_user("other@example.com")
+        mine = self.tokens()
+        self.client.force_authenticate(user=other)
+        self.client.post("/api/logout/", {"refresh": mine["refresh"]}, format="json")
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.refresh(mine["refresh"]).status_code, status.HTTP_200_OK)
+
+
+class ReminderTests(FrozenTimeAPITestCase):
+    def setUp(self):
+        super().setUp()
+        self.real = make_user("real.person@bookmymeal.test")
+        self.quiet = make_user("quiet.person@bookmymeal.test", email_reminders=False)
+
+    def test_reminders_go_to_people_with_bookings_tomorrow(self):
+        Booking.objects.create(user=self.real, meal=self.lunch, date=TOMORROW)
+        Booking.objects.create(user=self.real, meal=self.breakfast, date=TOMORROW)
+        Booking.objects.create(user=self.real, meal=self.lunch, date=TODAY)  # not tomorrow
+        Booking.objects.create(user=self.quiet, meal=self.lunch, date=TOMORROW)  # opted out
+        Booking.objects.create(user=self.employee, meal=self.lunch, date=TOMORROW)  # example.com
+
+        call_command("send_reminders", verbosity=0)
+
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ["real.person@bookmymeal.test"])
+        self.assertIn("Breakfast", message.body)
+        self.assertIn("Lunch", message.body)
+        self.assertIn("Friday 11 January", message.subject)
+
+    def test_user_can_switch_reminders_off(self):
+        self.login(self.real)
+        response = self.client.patch("/api/profile/", {"email_reminders": False}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.real.refresh_from_db()
+        self.assertFalse(self.real.email_reminders)
 
 
 class SeedDemoTests(APITestCase):
