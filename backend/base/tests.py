@@ -965,6 +965,32 @@ class ReminderTests(FrozenTimeAPITestCase):
         self.assertFalse(self.real.email_reminders)
 
 
+class SeedPhotoTests(APITestCase):
+    def test_seed_attaches_photos_found_in_the_seed_folder(self):
+        from base.management.commands import seed_demo
+
+        photos = tempfile.TemporaryDirectory()
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(photos.cleanup)
+        self.addCleanup(media.cleanup)
+        Path(photos.name, "upma.png").write_bytes(png_upload().read())
+
+        with override_settings(MEDIA_ROOT=media.name), mock.patch.object(
+            seed_demo, "SEED_PHOTO_DIR", Path(photos.name)
+        ):
+            call_command("seed_demo", verbosity=0)
+            upma = Menu.objects.filter(description__startswith="Upma")
+            dosa = Menu.objects.filter(description__startswith="Masala dosa")
+            self.assertTrue(upma.exists())
+            self.assertTrue(all(menu.photo for menu in upma))
+            self.assertFalse(any(menu.photo for menu in dosa))  # no file for it
+
+            # Adding a photo later and re-running fills in the existing menus.
+            Path(photos.name, "masala-dosa.png").write_bytes(png_upload().read())
+            call_command("seed_demo", verbosity=0)
+            self.assertTrue(all(menu.photo for menu in dosa.all()))
+
+
 class SeedDemoTests(APITestCase):
     def test_seed_creates_demo_data_and_is_safe_to_rerun(self):
         call_command("seed_demo", verbosity=0)
