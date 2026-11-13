@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .booking_views import BookingViewSet, MealViewSet, MenuViewSet
+from .kitchen_views import AttendanceView, ForecastView, PrepSheetView
 from .views import (
     MyTokenObtainPairView,
     SendPasswordResetEmailView,
@@ -35,5 +36,8 @@ urlpatterns = [
     ),
     path("token/", MyTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("kitchen/prep-sheet/", PrepSheetView.as_view(), name="kitchen_prep_sheet"),
+    path("kitchen/attendance/", AttendanceView.as_view(), name="kitchen_attendance"),
+    path("kitchen/forecast/", ForecastView.as_view(), name="kitchen_forecast"),
     path("", include(router.urls)),
 ]

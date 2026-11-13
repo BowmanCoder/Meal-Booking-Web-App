@@ -53,6 +53,14 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 | `GET bookings/` | signed in | Your bookings (staff and admins see everyone's) |
 | `POST bookings/` | signed in | Book `{meal, date}` or `{meal, start_date, end_date}`, optional `guest_name` |
 | `DELETE bookings/<id>/` | owner, admin | Cancel before the cut-off |
+| `POST bookings/redeem/` | staff, admin | Redeem a scanned `coupon_code`. Works once per coupon, on the day of the meal |
+| `GET kitchen/prep-sheet/?date=` | staff, admin | How many of each meal to prepare, split by dietary preference |
+| `GET kitchen/attendance/?date_from=&date_to=` | staff, admin | Booked versus redeemed, and no-show rates |
+| `GET kitchen/forecast/?days=` | staff, admin | Expected bookings for the coming days |
+
+**Redeeming once only.** Redemption is a single conditional database update ("mark redeemed where not yet redeemed"), so if the same coupon is scanned twice at the same moment, exactly one scan succeeds.
+
+**Forecast.** A simple, explainable baseline: the average bookings for the same meal on the same weekday over the last four weeks, never below what is already booked.
 
 Booking rules enforced by the server: one own booking per person, date and meal; no bookings or cancellations after the meal's cut-off; redeemed bookings cannot be cancelled.
 

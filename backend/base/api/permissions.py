@@ -9,3 +9,11 @@ class ReadOnlyOrCanteenAdmin(BasePermission):
         if not (user and user.is_authenticated):
             return False
         return request.method in SAFE_METHODS or user.is_canteen_admin
+
+
+class IsCanteenStaff(BasePermission):
+    """Canteen staff and admins only."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and user.is_canteen_staff)
