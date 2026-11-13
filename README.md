@@ -64,6 +64,8 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 
 **Forecast.** A simple, explainable baseline: the average bookings for the same meal on the same weekday over the last four weeks, never below what is already booked.
 
+**Serving days.** Each meal has the weekdays it is served on, Monday to Friday by default. Other days cannot be booked, and a date range simply skips them.
+
 Booking rules enforced by the server: one own booking per person, date and meal; no bookings or cancellations after the meal's cut-off; redeemed bookings cannot be cancelled.
 
 ### Email reminders

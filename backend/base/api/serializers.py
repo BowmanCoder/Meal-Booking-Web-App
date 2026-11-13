@@ -96,7 +96,7 @@ class SendPasswordResetEmailSerializer(serializers.Serializer):
             return
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = PasswordResetTokenGenerator().make_token(user)
-        link = f"{settings.FRONTEND_URL}/api/resetpassword/{uid}/{token}"
+        link = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}"
         send_mail(
             subject="Reset your BookMyMeal password",
             message=f"Use this link to choose a new password: {link}",

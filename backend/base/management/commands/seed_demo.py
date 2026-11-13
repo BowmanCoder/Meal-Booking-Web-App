@@ -63,7 +63,9 @@ EMPLOYEES = [
     ("nina@example.com", "Nina Petrova", DietaryPreference.NONE),
 ]
 
-# Share of employees who book each meal, by weekday (Mon=0). Weekends are quiet.
+# Share of employees who book each meal, by weekday (Mon=0). Meals are served
+# Monday to Friday by default, so the weekend figures only matter if an admin
+# opens the canteen on those days.
 DEMAND = {
     "Breakfast": [0.35, 0.40, 0.40, 0.35, 0.25, 0.05, 0.05],
     "Lunch": [0.80, 0.90, 0.90, 0.85, 0.65, 0.10, 0.10],
@@ -97,6 +99,8 @@ class Command(BaseCommand):
         for offset in range(-HISTORY_DAYS, UPCOMING_DAYS + 7):
             day = today + timedelta(days=offset)
             for name, meal in meals.items():
+                if not meal.is_served_on(day):
+                    continue
                 dishes = DISHES[name]
                 Menu.objects.get_or_create(
                     date=day,
@@ -119,6 +123,8 @@ class Command(BaseCommand):
             for offset in range(-HISTORY_DAYS, UPCOMING_DAYS + 1):
                 day = today + timedelta(days=offset)
                 for name, meal in meals.items():
+                    if not meal.is_served_on(day):
+                        continue
                     share = DEMAND[name][day.weekday()]
                     for employee in employees:
                         if rng.random() >= share:

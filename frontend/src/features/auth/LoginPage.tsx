@@ -60,6 +60,9 @@ export default function LoginPage() {
         <Button type="submit" variant="contained" size="large" disabled={isLoading || !email || !password}>
           {isLoading ? "Signing in…" : "Sign in"}
         </Button>
+        <Link component={RouterLink} to="/forgot-password">
+          Forgot your password?
+        </Link>
         <Typography color="text.secondary">
           New here?{" "}
           <Link component={RouterLink} to="/register">

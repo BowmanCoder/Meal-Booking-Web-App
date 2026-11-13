@@ -5,9 +5,13 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { store } from "./app/store";
 import AppShell from "./components/AppShell";
+import AccountPage from "./features/account/AccountPage";
+import ForgotPasswordPage from "./features/auth/ForgotPasswordPage";
 import LoginPage from "./features/auth/LoginPage";
 import RegisterPage from "./features/auth/RegisterPage";
 import RequireAuth from "./features/auth/RequireAuth";
+import ResetPasswordPage from "./features/auth/ResetPasswordPage";
+import MyBookingsPage from "./features/booking/MyBookingsPage";
 import WeekPage from "./features/booking/WeekPage";
 import { theme } from "./theme";
 
@@ -20,9 +24,13 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
             <Route element={<RequireAuth />}>
               <Route element={<AppShell />}>
                 <Route path="/" element={<WeekPage />} />
+                <Route path="/bookings" element={<MyBookingsPage />} />
+                <Route path="/account" element={<AccountPage />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -100,6 +100,11 @@ class Meal(models.Model):
     # `cutoff_days_before` days earlier (0 = the same day).
     cutoff_time = models.TimeField()
     cutoff_days_before = models.PositiveSmallIntegerField(default=0)
+    serving_days = models.CharField(
+        max_length=7,
+        default="01234",
+        help_text="Weekdays this meal is served, as digits: 0 is Monday, 6 is Sunday.",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -113,8 +118,15 @@ class Meal(models.Model):
         cutoff_day = date - timedelta(days=self.cutoff_days_before)
         return timezone.make_aware(datetime.combine(cutoff_day, self.cutoff_time))
 
-    def is_open_for(self, date):
+    def is_served_on(self, date):
+        return str(date.weekday()) in self.serving_days
+
+    def is_before_cutoff(self, date):
         return timezone.now() < self.cutoff_for(date)
+
+    def is_open_for(self, date):
+        """Can `date` still be booked? It must be a serving day, before the cut-off."""
+        return self.is_served_on(date) and self.is_before_cutoff(date)
 
 
 class Menu(models.Model):
@@ -146,6 +158,12 @@ class Booking(models.Model):
     date = models.DateField()
     # Empty for the employee's own meal; filled in when booking for a guest.
     guest_name = models.CharField(max_length=100, blank=True, default="")
+    # A guest has no profile, so their preference is recorded on the booking.
+    guest_dietary_preference = models.CharField(
+        max_length=20,
+        choices=DietaryPreference.choices,
+        default=DietaryPreference.NONE,
+    )
     coupon_code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     redeemed_at = models.DateTimeField(null=True, blank=True)
     redeemed_by = models.ForeignKey(
@@ -175,6 +193,13 @@ class Booking(models.Model):
     @property
     def is_guest(self):
         return bool(self.guest_name)
+
+    @property
+    def dietary_preference(self):
+        """The preference of whoever will eat this meal."""
+        if self.is_guest:
+            return self.guest_dietary_preference
+        return self.user.dietary_preference
 
     @property
     def is_redeemed(self):

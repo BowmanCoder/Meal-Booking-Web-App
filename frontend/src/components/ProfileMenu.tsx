@@ -14,6 +14,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 
 import {
   useGetProfileQuery,
@@ -148,6 +149,9 @@ export default function ProfileMenu() {
             <Divider />
 
             <Stack spacing={1}>
+              <Button component={RouterLink} to="/account" color="inherit" onClick={() => setAnchor(null)}>
+                Name and password
+              </Button>
               <Button variant="outlined" onClick={handleLogout}>
                 Log out
               </Button>

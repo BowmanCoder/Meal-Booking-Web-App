@@ -24,6 +24,19 @@ export const authApi = baseApi.injectEndpoints({
     register: build.mutation<SignInResponse, RegisterRequest>({
       query: (body) => ({ url: "register/", method: "POST", body }),
     }),
+    requestPasswordReset: build.mutation<{ msg: string }, { email: string }>({
+      query: (body) => ({ url: "resetpasswordemail/", method: "POST", body }),
+    }),
+    resetPassword: build.mutation<
+      { msg: string },
+      { uid: string; token: string; password: string; password2: string }
+    >({
+      query: ({ uid, token, ...body }) => ({
+        url: `resetpassword/${encodeURIComponent(uid)}/${encodeURIComponent(token)}/`,
+        method: "POST",
+        body,
+      }),
+    }),
     getProfile: build.query<User, void>({
       query: () => "profile/",
       providesTags: ["Profile"],
@@ -31,6 +44,12 @@ export const authApi = baseApi.injectEndpoints({
     updateProfile: build.mutation<User, ProfileUpdate>({
       query: (body) => ({ url: "profile/", method: "PATCH", body }),
       invalidatesTags: ["Profile"],
+    }),
+    changePassword: build.mutation<
+      { msg: string },
+      { current_password: string; password: string; password2: string }
+    >({
+      query: (body) => ({ url: "changepassword/", method: "POST", body }),
     }),
     logout: build.mutation<void, { refresh: string }>({
       query: (body) => ({ url: "logout/", method: "POST", body }),
@@ -44,8 +63,11 @@ export const authApi = baseApi.injectEndpoints({
 export const {
   useLoginMutation,
   useRegisterMutation,
+  useRequestPasswordResetMutation,
+  useResetPasswordMutation,
   useGetProfileQuery,
   useUpdateProfileMutation,
+  useChangePasswordMutation,
   useLogoutMutation,
   useLogoutEverywhereMutation,
 } = authApi;

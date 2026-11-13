@@ -17,11 +17,17 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api/";
 // credentials", not "your session expired", so they are never retried.
 const SIGN_IN_PATHS = ["login/", "register/", "token/", "resetpassword"];
 
+// Endpoints used while signed out. They never carry a token: the server
+// rejects any request with an expired one, even on its public endpoints.
+const PUBLIC_ENDPOINTS = ["login", "register", "requestPasswordReset", "resetPassword"];
+
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_URL,
-  prepareHeaders: (headers, { getState }) => {
+  prepareHeaders: (headers, { getState, endpoint }) => {
     const token = (getState() as RootState).auth.access;
-    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (token && !PUBLIC_ENDPOINTS.includes(endpoint)) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
     return headers;
   },
 });

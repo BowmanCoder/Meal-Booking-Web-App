@@ -40,11 +40,6 @@ export function startOfMonth(iso: string): string {
   return toISODate(new Date(date.getFullYear(), date.getMonth(), 1));
 }
 
-export function isWeekend(iso: string): boolean {
-  const day = parseISODate(iso).getDay();
-  return day === 0 || day === 6;
-}
-
 /** Every date from `from` to `to`, inclusive. */
 export function eachDay(from: string, to: string): string[] {
   const days: string[] = [];

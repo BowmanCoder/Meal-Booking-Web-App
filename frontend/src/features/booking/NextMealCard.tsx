@@ -25,12 +25,19 @@ function servingIsOver(booking: Booking, meals: Meal[] | undefined, today: strin
 /** The signed-in user's next uncollected meal, with its coupon. */
 export default function NextMealCard() {
   const today = todayISO();
-  const { data: bookings } = useGetMyBookingsQuery({ date_from: today });
+  const { data: bookings, isSuccess } = useGetMyBookingsQuery({ date_from: today });
   const { data: meals } = useGetMealsQuery();
   const next = bookings?.find(
     (booking) => !booking.is_redeemed && !servingIsOver(booking, meals, today),
   );
-  if (!next) return null;
+  if (!next) {
+    // Say so, rather than leaving a gap, once we know there is nothing booked.
+    return isSuccess ? (
+      <Typography color="text.secondary" sx={{ p: 3, borderRadius: "24px", bgcolor: primaryTint }}>
+        You have no meals booked yet. Pick a day above to get started.
+      </Typography>
+    ) : null;
+  }
 
   return (
     <Stack

@@ -67,10 +67,15 @@ def prep_sheet(day):
             redeemed=Count("id", filter=REDEEMED_FILTER),
         )
     }
+    # Own meals use the person's profile; guest meals carry their own preference.
     by_diet = {}
-    own_meals = bookings.filter(guest_name="")
-    for row in own_meals.values("meal_id", "user__dietary_preference").annotate(n=Count("id")):
-        by_diet.setdefault(row["meal_id"], {})[row["user__dietary_preference"]] = row["n"]
+    for queryset, field in (
+        (bookings.filter(guest_name=""), "user__dietary_preference"),
+        (bookings.exclude(guest_name=""), "guest_dietary_preference"),
+    ):
+        for row in queryset.values("meal_id", field).annotate(n=Count("id")):
+            diets = by_diet.setdefault(row["meal_id"], {})
+            diets[row[field]] = diets.get(row[field], 0) + row["n"]
     menus = {menu.meal_id: menu.description for menu in Menu.objects.filter(date=day)}
 
     sheet = []
@@ -83,12 +88,13 @@ def prep_sheet(day):
                 "meal_name": meal.name,
                 "serve_time": meal.serve_time,
                 "menu": menus.get(meal.id, ""),
+                "is_served": meal.is_served_on(day),
                 # Once booking has closed the count can no longer change.
                 "is_final": not meal.is_open_for(day),
                 "total": counts.get("total", 0),
                 "guests": counts.get("guests", 0),
                 "redeemed": counts.get("redeemed", 0),
-                # Guests have no profile, so they are not in this split.
+                # Covers everyone eating, guests included, so it adds up to `total`.
                 "by_dietary_preference": {
                     value: diets.get(value, 0) for value in DietaryPreference.values
                 },
@@ -191,6 +197,8 @@ def forecast(days):
             if first_booking and max(history_start, first_booking) <= past < today
         ][:FORECAST_WEEKS]
         for meal in meals:
+            if not meal.is_served_on(day):
+                continue
             samples = [history.get((past, meal.id), 0) for past in past_days]
             expected = int(sum(samples) / len(samples) + 0.5) if samples else None
             booked = upcoming.get((day, meal.id), 0)
