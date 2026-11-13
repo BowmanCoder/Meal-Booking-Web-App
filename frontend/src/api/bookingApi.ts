@@ -23,7 +23,7 @@ export const bookingApi = baseApi.injectEndpoints({
       query: () => "meals/",
       providesTags: ["Meals"],
     }),
-    getMenus: build.query<Menu[], DateRange & { meal: number }>({
+    getMenus: build.query<Menu[], DateRange & { meal?: number }>({
       query: (params) => ({ url: "menus/", params }),
       providesTags: ["Menus"],
     }),
@@ -37,7 +37,7 @@ export const bookingApi = baseApi.injectEndpoints({
     }),
     createBookings: build.mutation<Booking[], CreateBookingsRequest>({
       query: (body) => ({ url: "bookings/", method: "POST", body }),
-      invalidatesTags: ["Bookings", "Availability"],
+      invalidatesTags: ["Bookings", "Availability", "Kitchen"],
     }),
     cancelBooking: build.mutation<void, number>({
       query: (id) => ({ url: `bookings/${id}/`, method: "DELETE" }),

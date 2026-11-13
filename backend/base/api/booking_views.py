@@ -85,6 +85,11 @@ class MenuViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(meal_id=meal)
         return queryset
 
+    def perform_destroy(self, menu):
+        if menu.photo:
+            menu.photo.delete(save=False)
+        menu.delete()
+
 
 class BookingViewSet(
     mixins.CreateModelMixin,

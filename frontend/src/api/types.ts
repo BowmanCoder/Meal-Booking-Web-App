@@ -45,6 +45,8 @@ export interface Menu {
   meal: number;
   meal_name: string;
   description: string;
+  /** Address of the dish photo, or null when there is none. */
+  photo: string | null;
 }
 
 export interface Booking {
@@ -84,4 +86,57 @@ export interface AvailabilityDay {
 export interface Availability {
   meal: number;
   days: AvailabilityDay[];
+}
+
+export type RedeemResult = "redeemed" | "already_redeemed" | "wrong_day" | "not_found";
+
+export interface RedeemResponse {
+  result: RedeemResult;
+  message: string;
+  booking: Booking | null;
+}
+
+export interface PrepMeal {
+  meal: number;
+  meal_name: string;
+  serve_time: string;
+  menu: string;
+  is_served: boolean;
+  /** True once booking has closed, so the count cannot change. */
+  is_final: boolean;
+  total: number;
+  guests: number;
+  redeemed: number;
+  by_dietary_preference: Record<DietaryPreference, number>;
+}
+
+export interface PrepSheet {
+  date: string;
+  meals: PrepMeal[];
+}
+
+export interface AttendanceCounts {
+  booked: number;
+  redeemed: number;
+  no_shows: number;
+  no_show_rate: number | null;
+}
+
+export interface Attendance {
+  date_from: string;
+  date_to: string;
+  overall: AttendanceCounts;
+  by_meal: (AttendanceCounts & { meal: number; meal_name: string })[];
+  daily: (AttendanceCounts & { date: string; meal: number; meal_name: string })[];
+}
+
+export interface ForecastRow {
+  date: string;
+  meal: number;
+  meal_name: string;
+  booked: number;
+  /** Null when there is no history to base a forecast on. */
+  forecast: number | null;
+  is_final: boolean;
+  based_on_days: number;
 }
