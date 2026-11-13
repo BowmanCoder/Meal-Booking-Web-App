@@ -25,10 +25,10 @@ jobs:
       DJANGO_SECRET_KEY: ci-only-not-a-real-secret
       DJANGO_DEBUG: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
@@ -49,10 +49,10 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       # --legacy-peer-deps: react-popup only supports React 17. Removed in the frontend stage.
