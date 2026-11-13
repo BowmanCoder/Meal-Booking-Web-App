@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from base import kitchen
 from base.models import Booking, DietaryPreference, Meal, MealUser, Menu, Role
 
 # The tests freeze "now" so cut-off rules do not depend on when they run.
@@ -316,6 +317,208 @@ class MealAndMenuTests(FrozenTimeAPITestCase):
         self.login(self.employee)
         response = self.client.get(f"/api/menus/?date_from={TOMORROW.isoformat()}")
         self.assertEqual([m["description"] for m in response.data], ["Tomorrow"])
+
+
+class RedeemTests(FrozenTimeAPITestCase):
+    def setUp(self):
+        super().setUp()
+        self.today = Booking.objects.create(user=self.employee, meal=self.lunch, date=TODAY)
+        self.tomorrow = Booking.objects.create(user=self.employee, meal=self.lunch, date=TOMORROW)
+
+    def redeem(self, code):
+        return self.client.post("/api/bookings/redeem/", {"coupon_code": str(code)}, format="json")
+
+    def test_only_staff_and_admins_can_redeem(self):
+        self.assertEqual(
+            self.redeem(self.today.coupon_code).status_code, status.HTTP_401_UNAUTHORIZED
+        )
+        self.login(self.employee)
+        self.assertEqual(
+            self.redeem(self.today.coupon_code).status_code, status.HTTP_403_FORBIDDEN
+        )
+        self.today.refresh_from_db()
+        self.assertFalse(self.today.is_redeemed)
+
+    def test_staff_redeems_todays_coupon(self):
+        self.login(self.staff)
+        response = self.redeem(self.today.coupon_code)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["result"], "redeemed")
+        self.assertEqual(response.data["booking"]["user_email"], "employee@example.com")
+        self.today.refresh_from_db()
+        self.assertEqual(self.today.redeemed_at, NOW)
+        self.assertEqual(self.today.redeemed_by, self.staff)
+
+    def test_coupon_cannot_be_redeemed_twice(self):
+        self.login(self.staff)
+        self.redeem(self.today.coupon_code)
+        later = NOW + timedelta(minutes=5)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.login(self.admin)
+            response = self.redeem(self.today.coupon_code)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["result"], "already_redeemed")
+        # The first redemption is untouched.
+        self.today.refresh_from_db()
+        self.assertEqual(self.today.redeemed_at, NOW)
+        self.assertEqual(self.today.redeemed_by, self.staff)
+
+    def test_simultaneous_scans_only_one_wins(self):
+        # Two scanners both load the booking while it is still unredeemed...
+        first_scanner = Booking.objects.get(pk=self.today.pk)
+        second_scanner = Booking.objects.get(pk=self.today.pk)
+        # ...then both try to claim it. Only one conditional UPDATE can match.
+        self.assertTrue(kitchen.claim_booking(first_scanner, self.staff))
+        self.assertFalse(kitchen.claim_booking(second_scanner, self.admin))
+        self.today.refresh_from_db()
+        self.assertEqual(self.today.redeemed_by, self.staff)
+
+    def test_coupon_for_another_day_is_refused(self):
+        self.login(self.staff)
+        response = self.redeem(self.tomorrow.coupon_code)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["result"], "wrong_day")
+        self.tomorrow.refresh_from_db()
+        self.assertFalse(self.tomorrow.is_redeemed)
+
+    def test_unknown_or_malformed_coupon_is_not_found(self):
+        self.login(self.staff)
+        for code in ["3f2b8c1e-0000-4000-8000-000000000000", "not-a-coupon", "12345"]:
+            response = self.redeem(code)
+            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, code)
+            self.assertEqual(response.data["result"], "not_found")
+
+
+class KitchenTests(FrozenTimeAPITestCase):
+    def setUp(self):
+        super().setUp()
+        self.vegan = make_user("vegan@example.com", dietary_preference=DietaryPreference.VEGAN)
+
+    def book(self, user, day, meal=None, redeemed=False, guest_name=""):
+        booking = Booking.objects.create(
+            user=user, meal=meal or self.lunch, date=day, guest_name=guest_name
+        )
+        if redeemed:
+            booking.redeemed_at = NOW
+            booking.redeemed_by = self.staff
+            booking.save()
+        return booking
+
+    def test_kitchen_endpoints_are_staff_only(self):
+        urls = ["/api/kitchen/prep-sheet/", "/api/kitchen/attendance/", "/api/kitchen/forecast/"]
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.login(self.employee)
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.login(self.staff)
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, status.HTTP_200_OK)
+
+    def test_prep_sheet_counts_by_meal_and_diet(self):
+        Menu.objects.create(date=TODAY, meal=self.lunch, description="Dal and rice")
+        self.book(self.employee, TODAY, redeemed=True)
+        self.book(self.other, TODAY)
+        self.book(self.vegan, TODAY)
+        self.book(self.employee, TODAY, guest_name="Visitor")
+        self.book(self.employee, TOMORROW)  # another day, not counted
+        self.login(self.staff)
+
+        response = self.client.get("/api/kitchen/prep-sheet/")
+        self.assertEqual(response.data["date"], TODAY)
+        lunch = next(m for m in response.data["meals"] if m["meal_name"] == "Lunch")
+        self.assertEqual(lunch["total"], 4)
+        self.assertEqual(lunch["guests"], 1)
+        self.assertEqual(lunch["redeemed"], 1)
+        self.assertEqual(lunch["menu"], "Dal and rice")
+        self.assertEqual(lunch["by_dietary_preference"]["vegan"], 1)
+        self.assertEqual(lunch["by_dietary_preference"]["none"], 2)
+        self.assertFalse(lunch["is_final"])  # 08:00, lunch closes 09:30
+
+        breakfast = next(m for m in response.data["meals"] if m["meal_name"] == "Breakfast")
+        self.assertEqual(breakfast["total"], 0)
+        self.assertTrue(breakfast["is_final"])  # closed yesterday evening
+
+        other_day = self.client.get(f"/api/kitchen/prep-sheet/?date={TOMORROW.isoformat()}")
+        lunch = next(m for m in other_day.data["meals"] if m["meal_name"] == "Lunch")
+        self.assertEqual(lunch["total"], 1)
+
+    def test_attendance_counts_no_shows_for_past_days_only(self):
+        self.book(self.employee, YESTERDAY, redeemed=True)
+        self.book(self.other, YESTERDAY, redeemed=True)
+        self.book(self.vegan, YESTERDAY, redeemed=True)
+        self.book(self.staff, YESTERDAY)  # no-show
+        self.book(self.employee, TODAY)  # not over yet, must be ignored
+        self.login(self.admin)
+
+        response = self.client.get("/api/kitchen/attendance/")
+        self.assertEqual(response.data["date_to"], YESTERDAY)
+        self.assertEqual(
+            response.data["overall"],
+            {"booked": 4, "redeemed": 3, "no_shows": 1, "no_show_rate": 0.25},
+        )
+        self.assertEqual(len(response.data["daily"]), 1)
+        self.assertEqual(response.data["daily"][0]["no_shows"], 1)
+        self.assertEqual(response.data["by_meal"][0]["meal_name"], "Lunch")
+
+    def test_attendance_rejects_a_range_in_the_future(self):
+        self.login(self.admin)
+        response = self.client.get(f"/api/kitchen/attendance/?date_from={TOMORROW.isoformat()}")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def forecast_for(self, day, meal_name="Lunch", days=7):
+        response = self.client.get(f"/api/kitchen/forecast/?days={days}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return next(
+            row
+            for row in response.data["days"]
+            if row["date"] == day and row["meal_name"] == meal_name
+        )
+
+    def test_forecast_averages_the_same_weekday(self):
+        people = [self.employee, self.other, self.vegan, self.staff]
+        # Lunch on the four previous Fridays: 2, 4, 2, 4 bookings -> average 3.
+        for weeks_ago, count in enumerate([2, 4, 2, 4], start=1):
+            for person in people[:count]:
+                self.book(person, TOMORROW - timedelta(weeks=weeks_ago))
+        self.book(self.employee, TOMORROW)
+        self.login(self.staff)
+
+        row = self.forecast_for(TOMORROW)
+        self.assertEqual(row["booked"], 1)
+        self.assertEqual(row["forecast"], 3)
+        self.assertEqual(row["based_on_days"], 4)
+        self.assertFalse(row["is_final"])
+
+    def test_forecast_is_never_below_current_bookings(self):
+        self.book(self.employee, TOMORROW - timedelta(weeks=1))
+        for person in [self.employee, self.other, self.vegan]:
+            self.book(person, TOMORROW)
+        self.login(self.staff)
+        self.assertEqual(self.forecast_for(TOMORROW)["forecast"], 3)
+
+    def test_forecast_is_the_final_count_once_booking_has_closed(self):
+        for weeks_ago in (1, 2):
+            for person in [self.employee, self.other, self.vegan]:
+                self.book(person, TODAY - timedelta(weeks=weeks_ago), meal=self.breakfast)
+        self.book(self.employee, TODAY, meal=self.breakfast)
+        self.login(self.staff)
+
+        row = self.forecast_for(TODAY, meal_name="Breakfast")
+        self.assertTrue(row["is_final"])
+        self.assertEqual(row["forecast"], 1)
+
+    def test_forecast_without_history_is_empty(self):
+        self.login(self.staff)
+        row = self.forecast_for(TOMORROW)
+        self.assertIsNone(row["forecast"])
+        self.assertEqual(row["based_on_days"], 0)
+
+    def test_forecast_days_must_be_sensible(self):
+        self.login(self.staff)
+        for value in ["0", "15", "abc"]:
+            response = self.client.get(f"/api/kitchen/forecast/?days={value}")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, value)
 
 
 class RegistrationAndLoginTests(APITestCase):

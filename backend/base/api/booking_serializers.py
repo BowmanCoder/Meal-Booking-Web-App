@@ -35,6 +35,9 @@ class BookingSerializer(serializers.ModelSerializer):
     meal_name = serializers.CharField(source="meal.name", read_only=True)
     user_email = serializers.EmailField(source="user.email", read_only=True)
     user_name = serializers.CharField(source="user.fullname", read_only=True)
+    dietary_preference = serializers.CharField(
+        source="user.dietary_preference", read_only=True
+    )
     is_guest = serializers.BooleanField(read_only=True)
     is_redeemed = serializers.BooleanField(read_only=True)
 
@@ -48,6 +51,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "user",
             "user_email",
             "user_name",
+            "dietary_preference",
             "guest_name",
             "is_guest",
             "coupon_code",
@@ -148,3 +152,7 @@ class BookingCreateSerializer(serializers.Serializer):
 
 def _format_dates(dates):
     return ", ".join(d.isoformat() for d in sorted(dates))
+
+
+class RedeemSerializer(serializers.Serializer):
+    coupon_code = serializers.CharField(max_length=64)

@@ -1,9 +1,11 @@
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from base import kitchen
 from base.models import Booking, Meal, Menu
 
 from .booking_serializers import (
@@ -11,11 +13,19 @@ from .booking_serializers import (
     BookingSerializer,
     MealSerializer,
     MenuSerializer,
+    RedeemSerializer,
 )
-from .permissions import ReadOnlyOrCanteenAdmin
+from .permissions import IsCanteenStaff, ReadOnlyOrCanteenAdmin
+
+REDEEM_RESPONSES = {
+    kitchen.REDEEMED: (status.HTTP_200_OK, "Valid. Enjoy your meal."),
+    kitchen.ALREADY_REDEEMED: (status.HTTP_409_CONFLICT, "This coupon has already been used."),
+    kitchen.WRONG_DAY: (status.HTTP_409_CONFLICT, "This coupon is for a different day."),
+    kitchen.NOT_FOUND: (status.HTTP_404_NOT_FOUND, "No booking matches this coupon."),
+}
 
 
-def _date_param(request, name):
+def date_param(request, name):
     """Read an optional YYYY-MM-DD query parameter, rejecting bad values."""
     raw = request.query_params.get(name)
     if not raw:
@@ -30,9 +40,9 @@ def _date_param(request, name):
 
 
 def _filter_by_dates(queryset, request):
-    date = _date_param(request, "date")
-    date_from = _date_param(request, "date_from")
-    date_to = _date_param(request, "date_to")
+    date = date_param(request, "date")
+    date_from = date_param(request, "date_from")
+    date_to = date_param(request, "date_to")
     if date:
         queryset = queryset.filter(date=date)
     if date_from:
@@ -89,6 +99,8 @@ class BookingViewSet(
     def get_serializer_class(self):
         if self.action == "create":
             return BookingCreateSerializer
+        if self.action == "redeem":
+            return RedeemSerializer
         return BookingSerializer
 
     def get_queryset(self):
@@ -122,3 +134,26 @@ class BookingViewSet(
                 f"Cancellation for {booking.meal.name} on {booking.date.isoformat()} has closed."
             )
         booking.delete()
+
+    @action(detail=False, methods=["post"], permission_classes=[IsCanteenStaff])
+    def redeem(self, request):
+        """Redeem a scanned coupon. Canteen staff and admins only.
+
+        Responds with `result`: redeemed (200), already_redeemed or
+        wrong_day (409), or not_found (404), plus the booking when there is one.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result, booking = kitchen.redeem_coupon(
+            serializer.validated_data["coupon_code"].strip(), request.user
+        )
+        http_status, message = REDEEM_RESPONSES[result]
+        booking_data = None
+        if booking is not None:
+            booking_data = BookingSerializer(
+                booking, context=self.get_serializer_context()
+            ).data
+        return Response(
+            {"result": result, "message": message, "booking": booking_data},
+            status=http_status,
+        )
