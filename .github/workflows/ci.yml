@@ -57,12 +57,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # --legacy-peer-deps: react-popup only supports React 17. Removed in the frontend stage.
+      # npm ci installs exactly what the lockfile pins, so builds are repeatable.
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-      # CI=false: the legacy code has lint warnings that would otherwise fail the build.
-      # Tightened once the dead code is removed in the frontend stage.
-      - name: Build
+        run: npm ci --no-audit --no-fund
+      # Type-checks with TypeScript, then makes the production build.
+      - name: Type-check and build
         run: npm run build
-        env:
-          CI: "false"
