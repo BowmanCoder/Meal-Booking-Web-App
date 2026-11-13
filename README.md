@@ -21,9 +21,11 @@ pip install -r requirements.txt
 
 cp .env.example .env             # then set DJANGO_SECRET_KEY in .env
 python manage.py migrate
-python manage.py createsuperuser
+python manage.py seed_demo       # demo meals, menus, accounts and booking history
 python manage.py runserver       # http://127.0.0.1:8000
 ```
+
+`seed_demo` prints the demo sign-ins (an admin, a canteen staff member and an employee). To create your own admin instead, run `python manage.py createsuperuser`.
 
 Generate a secret key with:
 
@@ -42,7 +44,9 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 | Endpoint | Who | What |
 |---|---|---|
 | `POST register/`, `POST login/` | anyone | Create an account, get tokens |
-| `GET profile/` | signed in | Your account, role and dietary preference |
+| `POST resetpasswordemail/`, `POST resetpassword/<uid>/<token>/` | anyone | Request and use a password reset link |
+| `GET profile/`, `PATCH profile/` | signed in | Your account and role; edit name and dietary preference |
+| `POST changepassword/` | signed in | Needs `current_password` |
 | `GET meals/` | signed in | Meal slots and their booking cut-offs |
 | `GET menus/?date_from=&date_to=` | signed in | What is being served |
 | `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus |

@@ -1,34 +1,28 @@
-from datetime import date, datetime, time, timedelta
+import re
+from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
 from unittest import mock
 
+from django.core import mail
+from django.core.management import call_command
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from base.models import Booking, Meal, MealUser, Role
+from base.models import Booking, DietaryPreference, Meal, MealUser, Menu, Role
 
 # The tests freeze "now" so cut-off rules do not depend on when they run.
 NOW = datetime(2030, 1, 10, 8, 0, tzinfo=dt_timezone.utc)  # a Thursday, 08:00
 TODAY = NOW.date()
 TOMORROW = TODAY + timedelta(days=1)
 YESTERDAY = TODAY - timedelta(days=1)
+PASSWORD = "Correct-Horse-42"
 
 
-def make_user(email, role=Role.EMPLOYEE):
-    user = MealUser.objects.create_user(
-        email=email,
-        date_of_birth=date(1995, 1, 1),
-        fullname="Test User",
-        username=email.split("@")[0],
-        contact="0000000000",
-        gender="Other",
-        address="Test address",
-        password="not-a-real-password",
+def make_user(email, role=Role.EMPLOYEE, **extra):
+    return MealUser.objects.create_user(
+        email=email, fullname="Test User", password=PASSWORD, role=role, **extra
     )
-    user.role = role
-    user.save()
-    return user
 
 
 class FrozenTimeAPITestCase(APITestCase):
@@ -313,10 +307,158 @@ class MealAndMenuTests(FrozenTimeAPITestCase):
         self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_menus_filter_by_date_range(self):
-        from base.models import Menu
-
         Menu.objects.create(date=TODAY, meal=self.lunch, description="Today")
         Menu.objects.create(date=TOMORROW, meal=self.lunch, description="Tomorrow")
         self.login(self.employee)
         response = self.client.get(f"/api/menus/?date_from={TOMORROW.isoformat()}")
         self.assertEqual([m["description"] for m in response.data], ["Tomorrow"])
+
+
+class RegistrationAndLoginTests(APITestCase):
+    def register(self, **overrides):
+        body = {
+            "email": "new@example.com",
+            "fullname": "New Person",
+            "password": PASSWORD,
+            "password2": PASSWORD,
+        }
+        body.update(overrides)
+        return self.client.post("/api/register/", body, format="json")
+
+    def test_register_needs_only_name_email_and_password(self):
+        response = self.register()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        user = MealUser.objects.get(email="new@example.com")
+        self.assertEqual(user.role, Role.EMPLOYEE)
+        self.assertTrue(user.check_password(PASSWORD))
+
+    def test_register_cannot_choose_a_role(self):
+        self.register(role="admin", is_admin=True)
+        user = MealUser.objects.get(email="new@example.com")
+        self.assertEqual(user.role, Role.EMPLOYEE)
+        self.assertFalse(user.is_admin)
+
+    def test_duplicate_email_is_rejected_ignoring_case(self):
+        make_user("new@example.com")
+        response = self.register(email="New@Example.com")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MealUser.objects.count(), 1)
+
+    def test_weak_or_mismatched_password_is_rejected(self):
+        weak = self.register(password="12345678", password2="12345678")
+        mismatch = self.register(password2="Something-Else-42")
+        self.assertEqual(weak.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(mismatch.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MealUser.objects.count(), 0)
+
+    def test_login_ignores_email_case(self):
+        make_user("new@example.com")
+        response = self.client.post(
+            "/api/login/", {"email": "NEW@example.com", "password": PASSWORD}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+
+
+class ProfileTests(APITestCase):
+    def setUp(self):
+        self.user = make_user("me@example.com")
+        self.client.force_authenticate(user=self.user)
+
+    def test_profile_shows_role_and_preference(self):
+        response = self.client.get("/api/profile/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(b'"role"', response.content)
+        self.assertIn(b'"dietary_preference"', response.content)
+
+    def test_user_can_update_dietary_preference(self):
+        response = self.client.patch(
+            "/api/profile/", {"dietary_preference": "vegan"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.dietary_preference, DietaryPreference.VEGAN)
+
+    def test_user_cannot_change_own_role_or_email(self):
+        self.client.patch(
+            "/api/profile/", {"role": "admin", "email": "x@example.com"}, format="json"
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.role, Role.EMPLOYEE)
+        self.assertEqual(self.user.email, "me@example.com")
+
+
+class PasswordTests(APITestCase):
+    NEW = "Battery-Staple-77"
+
+    def setUp(self):
+        self.user = make_user("me@example.com")
+
+    def change(self, **body):
+        self.client.force_authenticate(user=self.user)
+        return self.client.post("/api/changepassword/", body, format="json")
+
+    def test_change_password_requires_the_current_one(self):
+        missing = self.change(password=self.NEW, password2=self.NEW)
+        wrong = self.change(current_password="nope", password=self.NEW, password2=self.NEW)
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(wrong.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(PASSWORD))
+
+    def test_change_password(self):
+        response = self.change(current_password=PASSWORD, password=self.NEW, password2=self.NEW)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.NEW))
+
+    def test_reset_request_for_unknown_email_looks_the_same_and_sends_nothing(self):
+        known = self.client.post(
+            "/api/resetpasswordemail/", {"email": "me@example.com"}, format="json"
+        )
+        unknown = self.client.post(
+            "/api/resetpasswordemail/", {"email": "nobody@example.com"}, format="json"
+        )
+        self.assertEqual(known.status_code, status.HTTP_200_OK)
+        self.assertEqual(unknown.status_code, status.HTTP_200_OK)
+        self.assertEqual(known.content, unknown.content)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["me@example.com"])
+
+    def test_reset_link_sets_a_new_password_once(self):
+        self.client.post("/api/resetpasswordemail/", {"email": "me@example.com"}, format="json")
+        uid, token = re.search(r"/resetpassword/([^/]+)/(\S+)", mail.outbox[0].body).groups()
+        url = f"/api/resetpassword/{uid}/{token}/"
+        body = {"password": self.NEW, "password2": self.NEW}
+
+        response = self.client.post(url, body, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.NEW))
+
+        # The link stops working once the password has changed.
+        again = self.client.post(url, body, format="json")
+        self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_bad_reset_link_is_400(self):
+        body = {"password": self.NEW, "password2": self.NEW}
+        for url in ["/api/resetpassword/not-a-uid/not-a-token/", "/api/resetpassword/OTk5/x-y/"]:
+            response = self.client.post(url, body, format="json")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, url)
+
+
+class SeedDemoTests(APITestCase):
+    def test_seed_creates_demo_data_and_is_safe_to_rerun(self):
+        call_command("seed_demo", verbosity=0)
+        counts = (MealUser.objects.count(), Meal.objects.count(), Menu.objects.count())
+        bookings = Booking.objects.count()
+        self.assertEqual(Meal.objects.count(), 3)
+        self.assertTrue(MealUser.objects.filter(role=Role.ADMIN).exists())
+        self.assertTrue(MealUser.objects.filter(role=Role.STAFF).exists())
+        self.assertGreater(bookings, 0)
+        self.assertTrue(Booking.objects.filter(redeemed_at__isnull=False).exists())
+
+        call_command("seed_demo", verbosity=0)
+        self.assertEqual(
+            counts, (MealUser.objects.count(), Meal.objects.count(), Menu.objects.count())
+        )
+        self.assertEqual(Booking.objects.count(), bookings)
