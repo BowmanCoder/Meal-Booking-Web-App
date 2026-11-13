@@ -2,12 +2,12 @@
 
 An employee meal booking web app. Employees pre-book canteen meals, the kitchen sees how many to prepare, and each booking carries a coupon that is redeemed when the meal is collected.
 
-> **Status: under active rebuild.** This started as an internship project and is being completed stage by stage. Authentication works; the booking flow is being rebuilt. See the roadmap below.
+> **Status: under active rebuild.** This started as an internship project and is being completed stage by stage. The backend is complete and tested; the frontend is being rebuilt screen by screen. See the roadmap below.
 
 ## Tech stack
 
 - **Backend:** Django 5.2 (LTS), Django REST Framework, SimpleJWT (JWT auth), SQLite for local development
-- **Frontend:** React 18, Redux Toolkit / RTK Query, MUI
+- **Frontend:** React 19, TypeScript, Vite, Redux Toolkit / RTK Query, MUI (light and dark themes)
 
 ## Run it locally
 
@@ -69,10 +69,10 @@ Booking rules enforced by the server: one own booking per person, date and meal;
 ```bash
 cd frontend
 npm install
-npm start                        # http://localhost:3000
+npm run dev                      # http://localhost:3000
 ```
 
-The frontend expects the API at `http://127.0.0.1:8000/api/`.
+The frontend expects the API at `http://127.0.0.1:8000/api/`. To point it elsewhere, copy `frontend/.env.example` to `frontend/.env` and change `VITE_API_URL`.
 
 ## Roadmap
 
