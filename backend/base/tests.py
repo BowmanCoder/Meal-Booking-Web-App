@@ -241,6 +241,43 @@ class ViewBookingTests(FrozenTimeAPITestCase):
         by_meal = self.client.get(f"/api/bookings/?meal={self.lunch.id}")
         self.assertEqual(self.ids(by_meal), {self.mine.id, self.theirs.id})
 
+    def test_staff_can_ask_for_only_their_own(self):
+        own = Booking.objects.create(user=self.staff, meal=self.lunch, date=TOMORROW)
+        self.login(self.staff)
+        response = self.client.get("/api/bookings/?mine=1")
+        self.assertEqual(self.ids(response), {own.id})
+
+    def test_availability_shows_open_days_and_own_bookings(self):
+        self.login(self.employee)
+        url = (
+            f"/api/bookings/availability/?meal={self.lunch.id}"
+            f"&date_from={YESTERDAY.isoformat()}&date_to={TOMORROW.isoformat()}"
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        yesterday, today, tomorrow = response.data["days"]
+        self.assertFalse(yesterday["is_open"])
+        self.assertTrue(today["is_open"])  # 08:00, lunch closes 09:30
+        self.assertIsNone(today["booking"])
+        # Only the caller's own booking is reported, never someone else's.
+        self.assertEqual(tomorrow["booking"], self.mine.id)
+        self.assertFalse(tomorrow["is_redeemed"])
+
+    def test_availability_needs_a_meal_and_a_sensible_range(self):
+        self.login(self.employee)
+        base = "/api/bookings/availability/"
+        day = TOMORROW.isoformat()
+        far = (TOMORROW + timedelta(days=90)).isoformat()
+        for query in [
+            f"?date_from={day}&date_to={day}",
+            f"?meal=999&date_from={day}&date_to={day}",
+            f"?meal={self.lunch.id}&date_from={day}",
+            f"?meal={self.lunch.id}&date_from={day}&date_to={YESTERDAY.isoformat()}",
+            f"?meal={self.lunch.id}&date_from={day}&date_to={far}",
+        ]:
+            response = self.client.get(base + query)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, query)
+
     def test_bad_date_filter_is_400(self):
         self.login(self.admin)
         response = self.client.get("/api/bookings/?date=tomorrow")

@@ -52,6 +52,7 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 | `GET menus/?date_from=&date_to=` | signed in | What is being served |
 | `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus |
 | `GET bookings/` | signed in | Your bookings (staff and admins see everyone's) |
+| `GET bookings/availability/?meal=&date_from=&date_to=` | signed in | Per day: still open, when it closes, and your own booking if any |
 | `POST bookings/` | signed in | Book `{meal, date}`, `{meal, start_date, end_date}` or `{meal, dates: [...]}`, optional `guest_name` |
 | `DELETE bookings/<id>/` | owner, admin | Cancel before the cut-off |
 | `POST bookings/redeem/` | staff, admin | Redeem a scanned `coupon_code`. Works once per coupon, on the day of the meal |
