@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
-from base.models import Booking, Meal, Menu
+from base.models import Booking, DietaryPreference, Meal, Menu
 
 MAX_RANGE_DAYS = 31
 
@@ -46,9 +46,8 @@ class BookingSerializer(serializers.ModelSerializer):
     meal_name = serializers.CharField(source="meal.name", read_only=True)
     user_email = serializers.EmailField(source="user.email", read_only=True)
     user_name = serializers.CharField(source="user.fullname", read_only=True)
-    dietary_preference = serializers.CharField(
-        source="user.dietary_preference", read_only=True
-    )
+    # The guest's preference for a guest booking, otherwise the user's own.
+    dietary_preference = serializers.CharField(read_only=True)
     is_guest = serializers.BooleanField(read_only=True)
     is_redeemed = serializers.BooleanField(read_only=True)
     serve_time = serializers.TimeField(source="meal.serve_time", read_only=True)
@@ -106,6 +105,9 @@ class BookingCreateSerializer(serializers.Serializer):
     )
     guest_name = serializers.CharField(
         max_length=100, required=False, allow_blank=True, default=""
+    )
+    guest_dietary_preference = serializers.ChoiceField(
+        choices=DietaryPreference.choices, required=False, default=DietaryPreference.NONE
     )
 
     def validate(self, attrs):
@@ -175,6 +177,9 @@ class BookingCreateSerializer(serializers.Serializer):
                 )
 
         attrs["guest_name"] = guest_name
+        if not guest_name:
+            # Only guests carry a preference on the booking itself.
+            attrs["guest_dietary_preference"] = DietaryPreference.NONE
         attrs["dates"] = dates
         return attrs
 
@@ -186,7 +191,11 @@ class BookingCreateSerializer(serializers.Serializer):
             with transaction.atomic():
                 return [
                     Booking.objects.create(
-                        user=user, meal=meal, date=date, guest_name=guest_name
+                        user=user,
+                        meal=meal,
+                        date=date,
+                        guest_name=guest_name,
+                        guest_dietary_preference=validated_data["guest_dietary_preference"],
                     )
                     for date in validated_data["dates"]
                 ]

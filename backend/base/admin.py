@@ -92,7 +92,7 @@ class MenuAdmin(admin.ModelAdmin):
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
-    list_display = ["date", "meal", "user", "guest_name", "redeemed_at", "created_at"]
+    list_display = ["date", "meal", "user", "guest_name", "guest_dietary_preference", "redeemed_at", "created_at"]
     list_filter = ["meal"]
     date_hierarchy = "date"
     search_fields = ["user__email", "guest_name", "coupon_code"]

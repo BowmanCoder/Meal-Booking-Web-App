@@ -158,6 +158,12 @@ class Booking(models.Model):
     date = models.DateField()
     # Empty for the employee's own meal; filled in when booking for a guest.
     guest_name = models.CharField(max_length=100, blank=True, default="")
+    # A guest has no profile, so their preference is recorded on the booking.
+    guest_dietary_preference = models.CharField(
+        max_length=20,
+        choices=DietaryPreference.choices,
+        default=DietaryPreference.NONE,
+    )
     coupon_code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     redeemed_at = models.DateTimeField(null=True, blank=True)
     redeemed_by = models.ForeignKey(
@@ -187,6 +193,13 @@ class Booking(models.Model):
     @property
     def is_guest(self):
         return bool(self.guest_name)
+
+    @property
+    def dietary_preference(self):
+        """The preference of whoever will eat this meal."""
+        if self.is_guest:
+            return self.guest_dietary_preference
+        return self.user.dietary_preference
 
     @property
     def is_redeemed(self):

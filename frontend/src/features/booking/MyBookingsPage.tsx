@@ -2,11 +2,12 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
+import Pagination from "@mui/material/Pagination";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { QRCodeSVG } from "qrcode.react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
 import { useCancelBookingMutation, useGetMyBookingsQuery } from "../../api/bookingApi";
@@ -17,7 +18,7 @@ import { primaryTint } from "../../theme";
 import GuestBookingDialog from "./GuestBookingDialog";
 
 type Tab = "upcoming" | "past";
-const PAST_LIMIT = 60;
+const PAGE_SIZE = 5;
 const LONG_DATE: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
 
 interface Notice {
@@ -36,6 +37,8 @@ export default function MyBookingsPage() {
   const today = todayISO();
   const [tab, setTab] = useState<Tab>("upcoming");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const couponRef = useRef<HTMLDivElement>(null);
   const [guestOpen, setGuestOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -45,11 +48,25 @@ export default function MyBookingsPage() {
 
   const query = tab === "upcoming" ? upcoming : past;
   // Newest first for history, soonest first for what is coming.
-  const bookings =
-    tab === "upcoming" ? (upcoming.data ?? []) : [...(past.data ?? [])].reverse().slice(0, PAST_LIMIT);
+  const allBookings = tab === "upcoming" ? (upcoming.data ?? []) : [...(past.data ?? [])].reverse();
+  const pageCount = Math.max(1, Math.ceil(allBookings.length / PAGE_SIZE));
+  // If the last booking on the final page is cancelled, fall back a page.
+  const currentPage = Math.min(page, pageCount);
+  const bookings = allBookings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const usable = (upcoming.data ?? []).filter((booking) => !booking.is_redeemed);
   const selected = usable.find((booking) => booking.id === selectedId) ?? usable[0];
+
+  function showTab(next: Tab) {
+    setTab(next);
+    setPage(1);
+  }
+
+  function showCoupon(booking: Booking) {
+    setSelectedId(booking.id);
+    // On a phone the coupon sits above the list, so bring it into view.
+    couponRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 
   async function handleCancel(booking: Booking) {
     try {
@@ -73,14 +90,14 @@ export default function MyBookingsPage() {
             <Button
               variant={tab === "upcoming" ? "contained" : "outlined"}
               aria-pressed={tab === "upcoming"}
-              onClick={() => setTab("upcoming")}
+              onClick={() => showTab("upcoming")}
             >
               Upcoming
             </Button>
             <Button
               variant={tab === "past" ? "contained" : "outlined"}
               aria-pressed={tab === "past"}
-              onClick={() => setTab("past")}
+              onClick={() => showTab("past")}
             >
               Past
             </Button>
@@ -97,7 +114,7 @@ export default function MyBookingsPage() {
         <Stack component="section" aria-label={`${tab} bookings`} spacing={2} sx={{ flex: "2 1 480px", minWidth: 0 }}>
           {query.isLoading && <Typography color="text.secondary">Loading your bookings…</Typography>}
 
-          {query.isSuccess && bookings.length === 0 && (
+          {query.isSuccess && allBookings.length === 0 && (
             <Card sx={{ p: 3 }}>
               <Stack spacing={2} sx={{ alignItems: "flex-start" }}>
                 <Typography color="text.secondary">
@@ -151,7 +168,7 @@ export default function MyBookingsPage() {
                       size="small"
                       variant={isSelected ? "contained" : "outlined"}
                       aria-pressed={isSelected}
-                      onClick={() => setSelectedId(booking.id)}
+                      onClick={() => showCoupon(booking)}
                     >
                       Show coupon
                     </Button>
@@ -171,14 +188,32 @@ export default function MyBookingsPage() {
               </Card>
             );
           })}
+
+          {pageCount > 1 && (
+            <Stack sx={{ alignItems: "center", pt: 1 }}>
+              <Pagination
+                color="primary"
+                count={pageCount}
+                page={currentPage}
+                onChange={(_event, value) => setPage(value)}
+                aria-label={`Pages of ${tab} bookings`}
+              />
+            </Stack>
+          )}
         </Stack>
 
         {tab === "upcoming" && selected && (
           <Stack
             component="aside"
+            ref={couponRef}
             aria-label="Coupon for the selected booking"
             spacing={2}
             sx={{
+              // Above the list on a phone; beside it, and staying in view, on a wide screen.
+              order: { xs: -1, md: 0 },
+              position: { md: "sticky" },
+              top: { md: 96 },
+              scrollMarginTop: 96,
               flex: "1 1 280px",
               alignItems: "center",
               textAlign: "center",
@@ -220,7 +255,7 @@ export default function MyBookingsPage() {
           onClose={() => setGuestOpen(false)}
           onBooked={(guestName) => {
             setGuestOpen(false);
-            setTab("upcoming");
+            showTab("upcoming");
             setNotice({ severity: "success", text: `Meal booked for ${guestName}.` });
           }}
         />

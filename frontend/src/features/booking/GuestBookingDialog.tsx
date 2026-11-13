@@ -11,6 +11,7 @@ import { type FormEvent, useState } from "react";
 
 import { useCreateBookingsMutation, useGetMealsQuery } from "../../api/bookingApi";
 import { errorMessage } from "../../api/errors";
+import { DIETARY_LABELS, type DietaryPreference } from "../../api/types";
 import { todayISO } from "../../lib/dates";
 
 interface Props {
@@ -25,6 +26,7 @@ export default function GuestBookingDialog({ onClose, onBooked }: Props) {
   const [mealId, setMealId] = useState<number | "">("");
   const [date, setDate] = useState(today);
   const [guestName, setGuestName] = useState("");
+  const [diet, setDiet] = useState<DietaryPreference>("none");
   const [createBookings, { isLoading, error }] = useCreateBookingsMutation();
 
   const name = guestName.trim();
@@ -34,7 +36,12 @@ export default function GuestBookingDialog({ onClose, onBooked }: Props) {
     event.preventDefault();
     if (mealId === "" || !ready) return;
     try {
-      await createBookings({ meal: mealId, date, guest_name: name }).unwrap();
+      await createBookings({
+        meal: mealId,
+        date,
+        guest_name: name,
+        guest_dietary_preference: diet,
+      }).unwrap();
       onBooked(name);
     } catch {
       // The error is shown from the mutation state below.
@@ -56,6 +63,19 @@ export default function GuestBookingDialog({ onClose, onBooked }: Props) {
               onChange={(event) => setGuestName(event.target.value)}
               slotProps={{ htmlInput: { maxLength: 100 } }}
             />
+            <TextField
+              select
+              label="Guest's dietary preference"
+              helperText="The kitchen counts this in its prep sheet."
+              value={diet}
+              onChange={(event) => setDiet(event.target.value as DietaryPreference)}
+            >
+              {Object.entries(DIETARY_LABELS).map(([value, label]) => (
+                <MenuItem key={value} value={value}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField
               select
               label="Meal"

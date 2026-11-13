@@ -1,5 +1,5 @@
 import { baseApi } from "./baseApi";
-import type { Availability, Booking, Meal, Menu } from "./types";
+import type { Availability, Booking, DietaryPreference, Meal, Menu } from "./types";
 
 interface DateRange {
   date_from: string;
@@ -13,6 +13,8 @@ export interface CreateBookingsRequest {
   /** Several hand-picked days, booked all-or-nothing. */
   dates?: string[];
   guest_name?: string;
+  /** Only used together with guest_name. */
+  guest_dietary_preference?: DietaryPreference;
 }
 
 export const bookingApi = baseApi.injectEndpoints({

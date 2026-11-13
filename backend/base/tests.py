@@ -143,6 +143,19 @@ class CreateBookingTests(FrozenTimeAPITestCase):
         self.assertEqual(Booking.objects.count(), 3)
         self.assertTrue(first.data[0]["is_guest"])
 
+    def test_guest_booking_records_the_guests_dietary_preference(self):
+        response = self.book(
+            date=TOMORROW, guest_name="Visitor", guest_dietary_preference="gluten_free"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data[0]["dietary_preference"], "gluten_free")
+
+        # An own booking always uses the profile, whatever is sent.
+        own = self.book(date=TOMORROW, guest_dietary_preference="vegan")
+        self.assertEqual(own.data[0]["dietary_preference"], "none")
+        bad = self.book(date=TOMORROW, guest_name="Other", guest_dietary_preference="carnivore")
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_past_date_is_rejected(self):
         response = self.book(date=YESTERDAY)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -548,9 +561,13 @@ class KitchenTests(FrozenTimeAPITestCase):
         super().setUp()
         self.vegan = make_user("vegan@example.com", dietary_preference=DietaryPreference.VEGAN)
 
-    def book(self, user, day, meal=None, redeemed=False, guest_name=""):
+    def book(self, user, day, meal=None, redeemed=False, guest_name="", guest_diet="none"):
         booking = Booking.objects.create(
-            user=user, meal=meal or self.lunch, date=day, guest_name=guest_name
+            user=user,
+            meal=meal or self.lunch,
+            date=day,
+            guest_name=guest_name,
+            guest_dietary_preference=guest_diet,
         )
         if redeemed:
             booking.redeemed_at = NOW
@@ -574,7 +591,7 @@ class KitchenTests(FrozenTimeAPITestCase):
         self.book(self.employee, TODAY, redeemed=True)
         self.book(self.other, TODAY)
         self.book(self.vegan, TODAY)
-        self.book(self.employee, TODAY, guest_name="Visitor")
+        self.book(self.employee, TODAY, guest_name="Visitor", guest_diet="vegan")
         self.book(self.employee, TOMORROW)  # another day, not counted
         self.login(self.staff)
 
@@ -585,8 +602,10 @@ class KitchenTests(FrozenTimeAPITestCase):
         self.assertEqual(lunch["guests"], 1)
         self.assertEqual(lunch["redeemed"], 1)
         self.assertEqual(lunch["menu"], "Dal and rice")
-        self.assertEqual(lunch["by_dietary_preference"]["vegan"], 1)
+        # One vegan employee plus the vegan guest; the split adds up to the total.
+        self.assertEqual(lunch["by_dietary_preference"]["vegan"], 2)
         self.assertEqual(lunch["by_dietary_preference"]["none"], 2)
+        self.assertEqual(sum(lunch["by_dietary_preference"].values()), lunch["total"])
         self.assertFalse(lunch["is_final"])  # 08:00, lunch closes 09:30
 
         breakfast = next(m for m in response.data["meals"] if m["meal_name"] == "Breakfast")
@@ -787,7 +806,7 @@ class PasswordTests(APITestCase):
 
     def test_reset_link_sets_a_new_password_once(self):
         self.client.post("/api/resetpasswordemail/", {"email": "me@example.com"}, format="json")
-        uid, token = re.search(r"/resetpassword/([^/]+)/(\S+)", mail.outbox[0].body).groups()
+        uid, token = re.search(r"/reset-password/([^/]+)/(\S+)", mail.outbox[0].body).groups()
         url = f"/api/resetpassword/{uid}/{token}/"
         body = {"password": self.NEW, "password2": self.NEW}
 
