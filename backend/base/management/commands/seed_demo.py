@@ -135,8 +135,9 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                "Demo data ready. Sign in as admin@example.com, staff@example.com or "
-                f"employee@example.com with the password {DEMO_PASSWORD}"
+                "Demo data ready. App sign-ins: admin@example.com, staff@example.com, "
+                f"employee@example.com. Password for all: {DEMO_PASSWORD}\n"
+                "Only admin@example.com can open the Django admin at /admin/."
             )
         )
 
