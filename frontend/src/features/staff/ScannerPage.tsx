@@ -75,7 +75,7 @@ export default function ScannerPage() {
       preferredCamera: "environment",
     });
     scanner.start().catch(() => {
-      setCameraError("The camera could not be started. Allow camera access, or type the code below.");
+      setCameraError("The camera could not be started. Allow camera access, or type the code shown under the coupon.");
     });
     return () => scanner.destroy();
   }, []);
@@ -170,7 +170,7 @@ export default function ScannerPage() {
       ) : (
         <Stack component="form" direction="row" spacing={1} onSubmit={handleManual} noValidate>
           <TextField
-            label="Or type the coupon code"
+            label="Or type the 8-character code"
             size="small"
             value={manualCode}
             onChange={(event) => setManualCode(event.target.value)}

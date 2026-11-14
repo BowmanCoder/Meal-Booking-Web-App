@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 
 import { useGetMealsQuery, useGetMyBookingsQuery } from "../../api/bookingApi";
 import type { Booking, Meal } from "../../api/types";
+import { shortCode } from "../../lib/coupon";
 import { formatDate, todayISO } from "../../lib/dates";
 import { primaryTint } from "../../theme";
 
@@ -65,6 +66,12 @@ export default function NextMealCard() {
         <Typography color="text.secondary">
           {next.is_guest ? `Guest: ${next.guest_name}. ` : ""}
           Show this code at the counter. It works once, on the day of the meal.
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Code to type if it cannot be scanned:{" "}
+          <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700, color: "text.primary" }}>
+            {shortCode(next.coupon_code)}
+          </Box>
         </Typography>
       </Stack>
     </Stack>
