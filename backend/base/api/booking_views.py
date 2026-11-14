@@ -1,10 +1,12 @@
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -57,6 +59,23 @@ def _filter_by_dates(queryset, request):
     return queryset
 
 
+class OptionalPagination(PageNumberPagination):
+    """Pages the list only when the client asks with ?page=.
+
+    A person's own bookings are few, so those screens take the whole list. The
+    all-bookings screen can be long, so it asks for one page at a time.
+    """
+
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def paginate_queryset(self, queryset, request, view=None):
+        if "page" not in request.query_params:
+            return None
+        return super().paginate_queryset(queryset, request, view)
+
+
 class MealViewSet(viewsets.ModelViewSet):
     """Meal slots. Everyone signed in can read; canteen admins manage them."""
 
@@ -102,10 +121,13 @@ class BookingViewSet(
 
     Employees see and cancel only their own. Canteen staff and admins see all,
     or only their own with ?mine=1.
-    Filter with ?date=, ?date_from=, ?date_to= and ?meal=.
+    Filter with ?date=, ?date_from=, ?date_to=, ?meal=, ?status=collected or
+    not_collected, and ?search= (name, email or guest name). Add ?page= to get
+    one page at a time.
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = OptionalPagination
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -126,6 +148,22 @@ class BookingViewSet(
             if not meal.isdigit():
                 raise ValidationError({"meal": "Must be a meal id."})
             queryset = queryset.filter(meal_id=meal)
+
+        collected = self.request.query_params.get("status")
+        if collected == "collected":
+            queryset = queryset.filter(redeemed_at__isnull=False)
+        elif collected == "not_collected":
+            queryset = queryset.filter(redeemed_at__isnull=True)
+        elif collected:
+            raise ValidationError({"status": "Use collected or not_collected."})
+
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(user__fullname__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(guest_name__icontains=search)
+            )
         return queryset
 
     def create(self, request, *args, **kwargs):
