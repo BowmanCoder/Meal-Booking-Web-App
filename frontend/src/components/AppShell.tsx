@@ -6,15 +6,29 @@ import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import { NavLink, Outlet } from "react-router-dom";
 
+import { useGetProfileQuery } from "../api/authApi";
 import ProfileMenu from "./ProfileMenu";
 
-const NAV_LINKS = [
+const EVERYONE = [
   { to: "/", label: "This week" },
   { to: "/bookings", label: "My bookings" },
 ];
+const STAFF = [
+  { to: "/scan", label: "Scan" },
+  { to: "/kitchen", label: "Kitchen" },
+];
+const ADMIN = [{ to: "/menus", label: "Menus" }];
 
 /** Page frame for signed-in screens: top bar, navigation, profile menu. */
 export default function AppShell() {
+  // Staff and admins get extra links; the server enforces the actual access.
+  const { data: user } = useGetProfileQuery();
+  const links = [
+    ...EVERYONE,
+    ...(user && user.role !== "employee" ? STAFF : []),
+    ...(user?.role === "admin" ? ADMIN : []),
+  ];
+
   return (
     <Box sx={{ minHeight: "100vh" }}>
       <AppBar
@@ -24,7 +38,7 @@ export default function AppShell() {
         sx={{ bgcolor: "background.paper", borderBottom: 1, borderColor: "divider" }}
       >
         <Container maxWidth="lg">
-          <Toolbar disableGutters sx={{ minHeight: 72, justifyContent: "space-between", gap: 2 }}>
+          <Toolbar disableGutters sx={{ minHeight: 72, justifyContent: "space-between", flexWrap: "wrap", gap: 2, py: 1 }}>
             <Link
               component={NavLink}
               to="/"
@@ -33,8 +47,13 @@ export default function AppShell() {
             >
               BookMyMeal
             </Link>
-            <Stack direction="row" spacing={3} component="nav" aria-label="Main" sx={{ alignItems: "center" }}>
-              {NAV_LINKS.map((link) => (
+            <Stack
+              direction="row"
+              component="nav"
+              aria-label="Main"
+              sx={{ alignItems: "center", flexWrap: "wrap", columnGap: 3, rowGap: 1 }}
+            >
+              {links.map((link) => (
                 <Link
                   key={link.to}
                   component={NavLink}

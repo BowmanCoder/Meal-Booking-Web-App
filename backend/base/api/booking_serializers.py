@@ -6,6 +6,8 @@ from rest_framework import serializers
 from base.models import Booking, DietaryPreference, Meal, Menu
 
 MAX_RANGE_DAYS = 31
+MAX_PHOTO_BYTES = 3 * 1024 * 1024
+PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
 
 
 class MealSerializer(serializers.ModelSerializer):
@@ -34,10 +36,34 @@ class MealSerializer(serializers.ModelSerializer):
 
 class MenuSerializer(serializers.ModelSerializer):
     meal_name = serializers.CharField(source="meal.name", read_only=True)
+    # Send remove_photo=true to clear the photo without uploading a new one.
+    remove_photo = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = Menu
-        fields = ["id", "date", "meal", "meal_name", "description"]
+        fields = ["id", "date", "meal", "meal_name", "description", "photo", "remove_photo"]
+
+    def validate_photo(self, photo):
+        # ImageField has already confirmed the upload really is an image.
+        if photo and photo.size > MAX_PHOTO_BYTES:
+            raise serializers.ValidationError("The photo must be 3 MB or smaller.")
+        if photo and getattr(photo, "content_type", None) not in PHOTO_TYPES:
+            raise serializers.ValidationError("Use a JPEG, PNG or WebP image.")
+        return photo
+
+    def create(self, validated_data):
+        validated_data.pop("remove_photo", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        remove = validated_data.pop("remove_photo", False)
+        replacing = validated_data.get("photo") is not None
+        if instance.photo and (remove or replacing):
+            # Delete the old file so replaced photos do not pile up on disk.
+            instance.photo.delete(save=False)
+        if remove and not replacing:
+            validated_data["photo"] = ""
+        return super().update(instance, validated_data)
 
 
 class BookingSerializer(serializers.ModelSerializer):

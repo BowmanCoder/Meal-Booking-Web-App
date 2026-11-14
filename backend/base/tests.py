@@ -1,12 +1,17 @@
+import io
 import re
+import tempfile
+from pathlib import Path
 from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
 from unittest import mock
 
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import override_settings
 from django.utils import timezone
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -694,6 +699,70 @@ class KitchenTests(FrozenTimeAPITestCase):
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, value)
 
 
+def png_upload(name="dish.png"):
+    buffer = io.BytesIO()
+    Image.new("RGB", (24, 24), "purple").save(buffer, "PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+
+class MenuPhotoTests(FrozenTimeAPITestCase):
+    def setUp(self):
+        super().setUp()
+        # Uploads go to a throwaway folder, never the real media directory.
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(media.cleanup)
+        settings_override = override_settings(MEDIA_ROOT=media.name)
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.login(self.admin)
+
+    def create(self, **extra):
+        body = {"date": TOMORROW.isoformat(), "meal": self.lunch.id, "description": "Dal"}
+        body.update(extra)
+        return self.client.post("/api/menus/", body, format="multipart")
+
+    def test_admin_uploads_a_photo_and_everyone_sees_it(self):
+        response = self.create(photo=png_upload())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIn("/media/menus/", response.data["photo"])
+
+        self.login(self.employee)
+        listed = self.client.get("/api/menus/").data[0]
+        self.assertIn("/media/menus/", listed["photo"])
+
+    def test_menu_without_a_photo_is_fine(self):
+        response = self.create()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertIsNone(response.data["photo"])
+
+    def test_a_file_that_is_not_an_image_is_rejected(self):
+        fake = SimpleUploadedFile("dish.png", b"not really an image", content_type="image/png")
+        response = self.create(photo=fake)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Menu.objects.count(), 0)
+
+    def test_photo_can_be_replaced_and_removed(self):
+        menu_id = self.create(photo=png_upload("first.png")).data["id"]
+        menu = Menu.objects.get(pk=menu_id)
+        first_path = menu.photo.path
+
+        replaced = self.client.patch(
+            f"/api/menus/{menu_id}/", {"photo": png_upload("second.png")}, format="multipart"
+        )
+        self.assertEqual(replaced.status_code, status.HTTP_200_OK, replaced.data)
+        menu.refresh_from_db()
+        self.assertNotEqual(menu.photo.path, first_path)
+        self.assertFalse(Path(first_path).exists())  # the old file is cleaned up
+
+        removed = self.client.patch(
+            f"/api/menus/{menu_id}/", {"remove_photo": "true"}, format="multipart"
+        )
+        self.assertEqual(removed.status_code, status.HTTP_200_OK, removed.data)
+        self.assertIsNone(removed.data["photo"])
+        menu.refresh_from_db()
+        self.assertFalse(menu.photo)
+
+
 class RegistrationAndLoginTests(APITestCase):
     def register(self, **overrides):
         body = {
@@ -894,6 +963,32 @@ class ReminderTests(FrozenTimeAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         self.real.refresh_from_db()
         self.assertFalse(self.real.email_reminders)
+
+
+class SeedPhotoTests(APITestCase):
+    def test_seed_attaches_photos_found_in_the_seed_folder(self):
+        from base.management.commands import seed_demo
+
+        photos = tempfile.TemporaryDirectory()
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(photos.cleanup)
+        self.addCleanup(media.cleanup)
+        Path(photos.name, "upma.png").write_bytes(png_upload().read())
+
+        with override_settings(MEDIA_ROOT=media.name), mock.patch.object(
+            seed_demo, "SEED_PHOTO_DIR", Path(photos.name)
+        ):
+            call_command("seed_demo", verbosity=0)
+            upma = Menu.objects.filter(description__startswith="Upma")
+            dosa = Menu.objects.filter(description__startswith="Masala dosa")
+            self.assertTrue(upma.exists())
+            self.assertTrue(all(menu.photo for menu in upma))
+            self.assertFalse(any(menu.photo for menu in dosa))  # no file for it
+
+            # Adding a photo later and re-running fills in the existing menus.
+            Path(photos.name, "masala-dosa.png").write_bytes(png_upload().read())
+            call_command("seed_demo", verbosity=0)
+            self.assertTrue(all(menu.photo for menu in dosa.all()))
 
 
 class SeedDemoTests(APITestCase):

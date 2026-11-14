@@ -1,6 +1,8 @@
 import random
 from datetime import datetime, time, timedelta
+from pathlib import Path
 
+from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -18,30 +20,37 @@ MEALS = [
     ("Dinner", time(19, 30), time(15, 0), 0),
 ]
 
+# Each dish is (description, photo name). A photo is attached when a file with
+# that name (.jpg, .jpeg, .png or .webp) exists in base/seed_photos/.
 DISHES = {
     "Breakfast": [
-        "Masala dosa, sambar, coconut chutney",
-        "Poha, boiled egg, fruit",
-        "Idli, sambar, tomato chutney",
-        "Aloo paratha, curd, pickle",
-        "Upma, banana, filter coffee",
+        ("Masala dosa, sambar, coconut chutney", "masala-dosa"),
+        ("Poha, boiled egg, fruit", "poha"),
+        ("Idli, sambar, tomato chutney", "idli"),
+        ("Aloo paratha, curd, pickle", "aloo-paratha"),
+        ("Upma, banana, filter coffee", "upma"),
     ],
     "Lunch": [
-        "Dal tadka, jeera rice, roti, salad",
-        "Paneer butter masala, naan, raita",
-        "Veg biryani, boondi raita",
-        "Rajma, steamed rice, roti",
-        "Chole, bhature, onion salad",
-        "Sambar rice, beans poriyal, papad",
+        ("Dal tadka, jeera rice, roti, salad", "dal-tadka"),
+        ("Paneer butter masala, naan, raita", "paneer-butter-masala"),
+        ("Veg biryani, boondi raita", "veg-biryani"),
+        ("Rajma, steamed rice, roti", "rajma"),
+        ("Chole, bhature, onion salad", "chole-bhature"),
+        ("Sambar rice, beans poriyal, papad", "sambar-rice"),
     ],
     "Dinner": [
-        "Mixed veg curry, roti, dal",
-        "Palak paneer, jeera rice",
-        "Veg pulao, kadhi",
-        "Aloo gobi, roti, curd",
-        "Khichdi, papad, pickle",
+        ("Mixed veg curry, roti, dal", "mixed-veg-curry"),
+        ("Palak paneer, jeera rice", "palak-paneer"),
+        ("Veg pulao, kadhi", "veg-pulao"),
+        ("Aloo gobi, roti, curd", "aloo-gobi"),
+        ("Khichdi, papad, pickle", "khichdi"),
     ],
 }
+PHOTO_NAMES = {
+    description: name for dishes in DISHES.values() for description, name in dishes
+}
+SEED_PHOTO_DIR = Path(__file__).resolve().parents[2] / "seed_photos"
+PHOTO_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 STAFF_ACCOUNTS = [
     ("admin@example.com", "Asha Admin", Role.ADMIN),
@@ -105,8 +114,9 @@ class Command(BaseCommand):
                 Menu.objects.get_or_create(
                     date=day,
                     meal=meal,
-                    defaults={"description": dishes[day.toordinal() % len(dishes)]},
+                    defaults={"description": dishes[day.toordinal() % len(dishes)][0]},
                 )
+        photos = self._attach_photos()
 
         for email, fullname, role in STAFF_ACCOUNTS:
             self._user(email, fullname, role=role, is_admin=(role == Role.ADMIN))
@@ -139,6 +149,8 @@ class Command(BaseCommand):
             Booking.objects.bulk_create(bookings)
             self.stdout.write(f"Created {len(bookings)} demo bookings.")
 
+        if photos:
+            self.stdout.write(f"Attached {photos} dish photo(s).")
         self.stdout.write(
             self.style.SUCCESS(
                 "Demo data ready. App sign-ins: admin@example.com, staff@example.com, "
@@ -146,6 +158,30 @@ class Command(BaseCommand):
                 "Only admin@example.com can open the Django admin at /admin/."
             )
         )
+
+    def _attach_photos(self):
+        """Give every demo menu without a photo the picture for its dish, if we have one.
+
+        Running the command again after adding files to seed_photos/ fills in
+        the menus that were created earlier.
+        """
+        attached = 0
+        for menu in Menu.objects.filter(photo=""):
+            name = PHOTO_NAMES.get(menu.description)
+            source = name and next(
+                (
+                    SEED_PHOTO_DIR / f"{name}{extension}"
+                    for extension in PHOTO_EXTENSIONS
+                    if (SEED_PHOTO_DIR / f"{name}{extension}").is_file()
+                ),
+                None,
+            )
+            if not source:
+                continue
+            with source.open("rb") as handle:
+                menu.photo.save(source.name, File(handle), save=True)
+            attached += 1
+        return attached
 
     def _user(self, email, fullname, **fields):
         user = MealUser.objects.filter(email=email).first()

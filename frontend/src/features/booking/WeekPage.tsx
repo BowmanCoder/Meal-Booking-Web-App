@@ -51,7 +51,8 @@ export default function WeekPage() {
   const [cancelBooking, { isLoading: cancelling }] = useCancelBookingMutation();
   const busy = booking || cancelling;
 
-  const menuByDate = useMemo(() => new Map((menus ?? []).map((menu) => [menu.date, menu.description])), [menus]);
+  const menuByDate = useMemo(() => new Map((menus ?? []).map((menu) => [menu.date, menu])), [menus]);
+  const anyPhotos = (menus ?? []).some((menu) => menu.photo);
   const dayByDate = useMemo(
     () => new Map((availability?.days ?? []).map((day) => [day.date, day])),
     [availability],
@@ -155,7 +156,9 @@ export default function WeekPage() {
             key={date}
             date={date}
             mealName={meal.name}
-            menu={menuByDate.get(date)}
+            menu={menuByDate.get(date)?.description}
+            photo={menuByDate.get(date)?.photo}
+            reservePhotoSpace={anyPhotos}
             day={dayByDate.get(date)}
             failed={Boolean(availabilityError)}
             isToday={date === today}

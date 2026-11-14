@@ -147,6 +147,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
+# Uploaded dish photos. In production these should live in object storage.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 # Booking cut-off times are interpreted in this time zone.
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "UTC")
 

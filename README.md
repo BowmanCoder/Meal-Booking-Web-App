@@ -50,7 +50,7 @@ All endpoints are under `/api/` and need a JWT access token (`Authorization: Bea
 | `POST logout/`, `POST logout-all/` | signed in | End this session, or every session on all devices |
 | `GET meals/` | signed in | Meal slots and their booking cut-offs |
 | `GET menus/?date_from=&date_to=` | signed in | What is being served |
-| `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus |
+| `POST meals/`, `POST menus/` (and edit, delete) | admin | Manage meals and menus. A menu can carry a dish `photo` (multipart upload) |
 | `GET bookings/` | signed in | Your bookings (staff and admins see everyone's) |
 | `GET bookings/availability/?meal=&date_from=&date_to=` | signed in | Per day: still open, when it closes, and your own booking if any |
 | `POST bookings/` | signed in | Book `{meal, date}`, `{meal, start_date, end_date}` or `{meal, dates: [...]}`, optional `guest_name` |

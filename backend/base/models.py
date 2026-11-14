@@ -135,6 +135,7 @@ class Menu(models.Model):
     date = models.DateField()
     meal = models.ForeignKey(Meal, on_delete=models.CASCADE, related_name="menus")
     description = models.TextField()
+    photo = models.ImageField(upload_to="menus/", blank=True)
 
     class Meta:
         ordering = ["date", "meal__serve_time"]
