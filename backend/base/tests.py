@@ -604,6 +604,28 @@ class RedeemTests(FrozenTimeAPITestCase):
             self.assertEqual(response.data["result"], "not_found")
 
 
+    def test_typed_short_code_redeems_todays_coupon(self):
+        self.login(self.staff)
+        short = str(self.today.coupon_code)[:8].upper()
+        # Typed the way it is printed: upper case, with a space in the middle.
+        response = self.redeem(f" {short[:4]} {short[4:]} ")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["result"], "redeemed")
+        self.today.refresh_from_db()
+        self.assertEqual(self.today.redeemed_by, self.staff)
+
+        again = self.redeem(short)
+        self.assertEqual(again.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(again.data["result"], "already_redeemed")
+
+    def test_short_code_only_matches_todays_bookings(self):
+        self.login(self.staff)
+        response = self.redeem(str(self.tomorrow.coupon_code)[:8])
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.tomorrow.refresh_from_db()
+        self.assertFalse(self.tomorrow.is_redeemed)
+
+
 class KitchenTests(FrozenTimeAPITestCase):
     def setUp(self):
         super().setUp()

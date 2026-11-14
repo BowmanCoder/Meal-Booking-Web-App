@@ -13,6 +13,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { useCancelBookingMutation, useGetMyBookingsQuery } from "../../api/bookingApi";
 import { errorMessage } from "../../api/errors";
 import { DIETARY_LABELS, type Booking } from "../../api/types";
+import { shortCode } from "../../lib/coupon";
 import { addDays, formatDate, formatDateTime, formatTime, todayISO } from "../../lib/dates";
 import { primaryTint } from "../../theme";
 import GuestBookingDialog from "./GuestBookingDialog";
@@ -245,6 +246,12 @@ export default function MyBookingsPage() {
             </Box>
             <Typography variant="body2" color="text.secondary">
               Show this at the counter. It works once, on the day of the meal.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              If it cannot be scanned, give the code{" "}
+              <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700, color: "text.primary" }}>
+                {shortCode(selected.coupon_code)}
+              </Box>
             </Typography>
           </Stack>
         )}
