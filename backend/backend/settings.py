@@ -15,6 +15,7 @@ from datetime import timedelta
 import os
 
 from django.core.exceptions import ImproperlyConfigured
+import dj_database_url
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -43,6 +44,9 @@ if not SECRET_KEY:
     )
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
+# Render tells the app its own public hostname, so it never has to be typed in.
+if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+    ALLOWED_HOSTS.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
 
 # Where the React app is served. Used to build links in emails.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
@@ -75,6 +79,8 @@ REST_FRAMEWORK = {
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves the Django admin's CSS and JS in production.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -113,12 +119,24 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# DATABASE_URL (PostgreSQL) in production; a local SQLite file otherwise.
+if os.environ.get("DATABASE_URL"):
+    DATABASES = {
+        "default": dj_database_url.parse(
+            os.environ["DATABASE_URL"],
+            conn_max_age=600,
+            # The hosted database sleeps when idle; check a kept connection
+            # is still alive before reusing it.
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_USER_MODEL = "base.MealUser"
 
@@ -147,9 +165,12 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-# Uploaded dish photos. In production these should live in object storage.
+# Uploaded dish photos. Locally they are files in backend/media. In production
+# the server's disk is wiped on every deploy, so they go to Cloudinary instead
+# (switched on by setting CLOUDINARY_URL).
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+USE_CLOUDINARY = bool(os.environ.get("CLOUDINARY_URL"))
 
 # Booking cut-off times are interpreted in this time zone.
 TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "UTC")
@@ -163,6 +184,31 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "base.storage.CloudinaryMediaStorage"
+            if USE_CLOUDINARY
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
+}
+
+# Production runs behind the host's HTTPS proxy.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
@@ -170,10 +216,16 @@ STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # EMAIL CONFIG
-# Without SMTP credentials, emails are printed to the console (fine for local dev).
+# Three ways to send, picked by what is configured:
+#   BREVO_API_KEY set       -> Brevo's HTTPS API (works on hosts that block SMTP)
+#   EMAIL_HOST_USER/PASSWORD -> ordinary SMTP
+#   neither                 -> emails are printed to the console (local dev)
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "base.email_backends.BrevoEmailBackend"
+elif EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.mail.yahoo.com")
     EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
@@ -181,7 +233,9 @@ if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_USE_SSL = False
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@bookmymeal.local")
+DEFAULT_FROM_EMAIL = (
+    os.environ.get("DEFAULT_FROM_EMAIL") or EMAIL_HOST_USER or "noreply@bookmymeal.local"
+)
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),

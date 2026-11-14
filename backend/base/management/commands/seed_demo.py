@@ -86,12 +86,12 @@ NO_SHOW_RATE = 0.12
 class Command(BaseCommand):
     help = (
         "Create demo meals, menus, accounts and booking history. "
-        "Safe to run more than once: existing records are left alone."
+        "Safe to run more than once, and meant to be run daily on the live "
+        "demo: it only fills in days that have nothing yet."
     )
 
     @transaction.atomic
     def handle(self, *args, **options):
-        rng = random.Random(2026)
         today = timezone.localdate()
 
         meals = {}
@@ -126,28 +126,11 @@ class Command(BaseCommand):
         ]
         staff = MealUser.objects.get(email="staff@example.com")
 
-        if Booking.objects.exists():
-            self.stdout.write("Bookings already exist, so no demo bookings were added.")
-        else:
-            bookings = []
-            for offset in range(-HISTORY_DAYS, UPCOMING_DAYS + 1):
-                day = today + timedelta(days=offset)
-                for name, meal in meals.items():
-                    if not meal.is_served_on(day):
-                        continue
-                    share = DEMAND[name][day.weekday()]
-                    for employee in employees:
-                        if rng.random() >= share:
-                            continue
-                        booking = Booking(user=employee, meal=meal, date=day)
-                        if offset < 0 and rng.random() >= NO_SHOW_RATE:
-                            served = datetime.combine(day, meal.serve_time)
-                            served += timedelta(minutes=rng.randint(0, 40))
-                            booking.redeemed_at = timezone.make_aware(served)
-                            booking.redeemed_by = staff
-                        bookings.append(booking)
-            Booking.objects.bulk_create(bookings)
-            self.stdout.write(f"Created {len(bookings)} demo bookings.")
+        created = self._top_up_bookings(today, meals, employees)
+        settled = self._settle_past_bookings(today, staff)
+        self.stdout.write(
+            f"Added {created} demo booking(s); marked {settled} past booking(s) as served."
+        )
 
         if photos:
             self.stdout.write(f"Attached {photos} dish photo(s).")
@@ -158,6 +141,60 @@ class Command(BaseCommand):
                 "Only admin@example.com can open the Django admin at /admin/."
             )
         )
+
+    def _top_up_bookings(self, today, meals, employees):
+        """Fill every day in the demo window that has no bookings yet.
+
+        Run daily, this keeps the demo looking alive: tomorrow always has
+        bookings and the kitchen dashboard always has recent history. Each
+        day uses its own fixed random seed, so running twice changes nothing.
+        """
+        first = today - timedelta(days=HISTORY_DAYS)
+        last = today + timedelta(days=UPCOMING_DAYS)
+        busy_days = set(
+            Booking.objects.filter(date__range=(first, last)).values_list("date", flat=True)
+        )
+        bookings = []
+        for offset in range(-HISTORY_DAYS, UPCOMING_DAYS + 1):
+            day = today + timedelta(days=offset)
+            if day in busy_days:
+                continue
+            rng = random.Random(f"bookings-{day.isoformat()}")
+            for name, meal in meals.items():
+                if not meal.is_served_on(day):
+                    continue
+                share = DEMAND[name][day.weekday()]
+                for employee in employees:
+                    if rng.random() < share:
+                        bookings.append(Booking(user=employee, meal=meal, date=day))
+        Booking.objects.bulk_create(bookings)
+        return len(bookings)
+
+    def _settle_past_bookings(self, today, staff):
+        """Mark most past demo bookings as served, leaving a few as no-shows.
+
+        Only the demo employees' own bookings are touched. The decision is
+        tied to the booking's id, so a no-show stays a no-show on later runs.
+        """
+        pending = Booking.objects.filter(
+            date__lt=today,
+            date__gte=today - timedelta(days=HISTORY_DAYS),
+            redeemed_at__isnull=True,
+            guest_name="",
+            user__email__in=[email for email, _name, _diet in EMPLOYEES],
+        ).select_related("meal")
+        served = []
+        for booking in pending:
+            rng = random.Random(f"served-{booking.pk}")
+            if rng.random() < NO_SHOW_RATE:
+                continue
+            at = datetime.combine(booking.date, booking.meal.serve_time)
+            at += timedelta(minutes=rng.randint(0, 40))
+            booking.redeemed_at = timezone.make_aware(at)
+            booking.redeemed_by = staff
+            served.append(booking)
+        Booking.objects.bulk_update(served, ["redeemed_at", "redeemed_by"])
+        return len(served)
 
     def _attach_photos(self):
         """Give every demo menu without a photo the picture for its dish, if we have one.

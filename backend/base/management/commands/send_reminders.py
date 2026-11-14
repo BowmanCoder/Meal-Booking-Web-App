@@ -4,10 +4,8 @@ from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from base.email_backends import UNDELIVERABLE_DOMAINS
 from base.models import Booking
-
-# example.com is reserved and can never receive mail; the demo accounts use it.
-UNDELIVERABLE_DOMAINS = ("@example.com", "@example.org", "@example.net")
 
 
 class Command(BaseCommand):

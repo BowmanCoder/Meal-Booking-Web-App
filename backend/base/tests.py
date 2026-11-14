@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -1052,3 +1053,84 @@ class SeedDemoTests(APITestCase):
             counts, (MealUser.objects.count(), Meal.objects.count(), Menu.objects.count())
         )
         self.assertEqual(Booking.objects.count(), bookings)
+
+    def test_rerun_fills_empty_days_and_keeps_no_shows_stable(self):
+        call_command("seed_demo", verbosity=0)
+        served = set(
+            Booking.objects.filter(redeemed_at__isnull=False).values_list("id", flat=True)
+        )
+        no_shows = Booking.objects.filter(
+            date__lt=timezone.localdate(), redeemed_at__isnull=True
+        ).count()
+        self.assertGreater(no_shows, 0)
+
+        # A day that lost its bookings is filled again; settled days do not change.
+        day = Booking.objects.filter(date__gt=timezone.localdate()).first().date
+        Booking.objects.filter(date=day).delete()
+        call_command("seed_demo", verbosity=0)
+        self.assertTrue(Booking.objects.filter(date=day).exists())
+        self.assertEqual(
+            served,
+            set(Booking.objects.filter(redeemed_at__isnull=False).values_list("id", flat=True)),
+        )
+
+    def test_real_visitors_past_bookings_are_left_alone(self):
+        call_command("seed_demo", verbosity=0)
+        visitor = make_user("visitor@gmail.test")
+        booking = Booking.objects.create(
+            user=visitor,
+            meal=Meal.objects.get(name="Lunch"),
+            date=timezone.localdate() - timedelta(days=3),
+        )
+        call_command("seed_demo", verbosity=0)
+        booking.refresh_from_db()
+        self.assertIsNone(booking.redeemed_at)
+
+
+class BrevoEmailBackendTests(APITestCase):
+    @override_settings(
+        EMAIL_BACKEND="base.email_backends.BrevoEmailBackend", BREVO_API_KEY="test-key"
+    )
+    def test_sends_through_the_api_and_skips_demo_addresses(self):
+        with mock.patch("base.email_backends.urllib.request.urlopen") as urlopen:
+            sent = mail.send_mail(
+                "Hello", "Body text", "BookMyMeal <from@site.test>", ["real@site.test"]
+            )
+            skipped = mail.send_mail("Hello", "Body", "from@site.test", ["demo@example.com"])
+
+        self.assertEqual((sent, skipped), (1, 0))
+        self.assertEqual(urlopen.call_count, 1)
+        request = urlopen.call_args.args[0]
+        payload = json.loads(request.data)
+        self.assertEqual(request.get_header("Api-key"), "test-key")
+        self.assertEqual(payload["sender"], {"email": "from@site.test", "name": "BookMyMeal"})
+        self.assertEqual(payload["to"], [{"email": "real@site.test"}])
+        self.assertEqual(payload["textContent"], "Body text")
+
+
+class CloudinaryStorageTests(APITestCase):
+    def setUp(self):
+        import cloudinary
+
+        cloudinary.config(cloud_name="demo-cloud", api_key="key", api_secret="secret")
+        self.addCleanup(cloudinary.reset_config)
+
+    def test_upload_goes_to_cloudinary_and_the_url_points_there(self):
+        from base.storage import CloudinaryMediaStorage
+
+        storage = CloudinaryMediaStorage()
+        with mock.patch(
+            "base.storage.cloudinary.uploader.upload", return_value={"format": "jpg"}
+        ) as upload:
+            name = storage.save("menus/dal.jpeg", png_upload())
+
+        public_id = upload.call_args.kwargs["public_id"]
+        self.assertRegex(public_id, r"^bookmymeal/menus/dal-[0-9a-f]{8}$")
+        self.assertRegex(name, r"^menus/dal-[0-9a-f]{8}\.jpg$")
+        url = storage.url(name)
+        self.assertTrue(url.startswith("https://res.cloudinary.com/demo-cloud/image/upload/"))
+        self.assertTrue(url.endswith(f"/{public_id}.jpg"))
+
+        with mock.patch("base.storage.cloudinary.uploader.destroy") as destroy:
+            storage.delete(name)
+        self.assertEqual(destroy.call_args.args[0], public_id)
