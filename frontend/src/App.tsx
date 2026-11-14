@@ -18,7 +18,6 @@ import WeekPage from "./features/booking/WeekPage";
 import AllBookingsPage from "./features/staff/AllBookingsPage";
 import KitchenPage from "./features/staff/KitchenPage";
 import ScannerPage from "./features/staff/ScannerPage";
-import { ROUTER_FUTURE } from "./lib/router";
 import { theme } from "./theme";
 
 export default function App() {
@@ -26,7 +25,7 @@ export default function App() {
     <Provider store={store}>
       <ThemeProvider theme={theme} defaultMode="system">
         <CssBaseline />
-        <BrowserRouter future={ROUTER_FUTURE}>
+        <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />

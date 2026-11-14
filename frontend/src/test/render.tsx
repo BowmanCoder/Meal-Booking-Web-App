@@ -5,7 +5,6 @@ import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 
 import { createAppStore } from "../app/store";
-import { ROUTER_FUTURE } from "../lib/router";
 import { theme } from "../theme";
 
 /** Render a component with the app's theme, a fresh store and a router. */
@@ -14,7 +13,7 @@ export function renderApp(ui: ReactElement, { route = "/" }: { route?: string } 
   const result = render(
     <Provider store={store}>
       <ThemeProvider theme={theme}>
-        <MemoryRouter initialEntries={[route]} future={ROUTER_FUTURE}>
+        <MemoryRouter initialEntries={[route]}>
           {ui}
         </MemoryRouter>
       </ThemeProvider>
