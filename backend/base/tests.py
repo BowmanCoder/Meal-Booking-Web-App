@@ -390,6 +390,48 @@ class ViewBookingTests(FrozenTimeAPITestCase):
             response = self.client.get(base + query)
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, query)
 
+    def test_list_is_paged_only_when_asked(self):
+        for offset in range(2, 27):  # 25 more, 27 in total
+            Booking.objects.create(
+                user=self.other, meal=self.lunch, date=TOMORROW + timedelta(days=offset)
+            )
+        self.login(self.admin)
+
+        whole = self.client.get("/api/bookings/")
+        self.assertEqual(len(whole.data), 27)
+
+        first = self.client.get("/api/bookings/?page=1")
+        self.assertEqual(first.data["count"], 27)
+        self.assertEqual(len(first.data["results"]), 20)
+        second = self.client.get("/api/bookings/?page=2")
+        self.assertEqual(len(second.data["results"]), 7)
+        small = self.client.get("/api/bookings/?page=1&page_size=5")
+        self.assertEqual(len(small.data["results"]), 5)
+
+    def test_search_and_status_filters(self):
+        guest = Booking.objects.create(
+            user=self.employee, meal=self.lunch, date=TOMORROW, guest_name="Zelda Visitor"
+        )
+        self.theirs.redeemed_at = timezone.now()
+        self.theirs.save()
+        self.login(self.admin)
+
+        by_email = self.client.get("/api/bookings/?search=OTHER@example")
+        self.assertEqual(self.ids(by_email), {self.theirs.id})
+        by_guest = self.client.get("/api/bookings/?search=zelda")
+        self.assertEqual(self.ids(by_guest), {guest.id})
+        collected = self.client.get("/api/bookings/?status=collected")
+        self.assertEqual(self.ids(collected), {self.theirs.id})
+        waiting = self.client.get("/api/bookings/?status=not_collected")
+        self.assertEqual(self.ids(waiting), {self.mine.id, guest.id})
+        bad = self.client.get("/api/bookings/?status=maybe")
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_search_never_shows_an_employee_other_peoples_bookings(self):
+        self.login(self.employee)
+        response = self.client.get("/api/bookings/?search=other")
+        self.assertEqual(self.ids(response), set())
+
     def test_bad_date_filter_is_400(self):
         self.login(self.admin)
         response = self.client.get("/api/bookings/?date=tomorrow")

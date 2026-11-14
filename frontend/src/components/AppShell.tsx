@@ -16,6 +16,7 @@ const EVERYONE = [
 const STAFF = [
   { to: "/scan", label: "Scan" },
   { to: "/kitchen", label: "Kitchen" },
+  { to: "/all-bookings", label: "All bookings" },
 ];
 const ADMIN = [{ to: "/menus", label: "Menus" }];
 

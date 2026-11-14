@@ -1,7 +1,21 @@
 import { baseApi } from "./baseApi";
-import type { Attendance, ForecastRow, Meal, Menu, PrepSheet, RedeemResponse } from "./types";
+import type { Attendance, Booking, ForecastRow, Meal, Menu, PrepSheet, RedeemResponse } from "./types";
 
 export type MealUpdate = Partial<Omit<Meal, "id">>;
+
+export interface AllBookingsQuery {
+  page: number;
+  date_from?: string;
+  date_to?: string;
+  meal?: number;
+  status?: "collected" | "not_collected";
+  search?: string;
+}
+
+export interface BookingPage {
+  count: number;
+  results: Booking[];
+}
 
 /** Endpoints for canteen staff and admins. */
 export const kitchenApi = baseApi.injectEndpoints({
@@ -16,6 +30,11 @@ export const kitchenApi = baseApi.injectEndpoints({
         validateStatus: (response) => [200, 404, 409].includes(response.status),
       }),
       invalidatesTags: ["Kitchen"],
+    }),
+    getAllBookings: build.query<BookingPage, AllBookingsQuery>({
+      // The server pages this list, 20 at a time; it can be long.
+      query: (params) => ({ url: "bookings/", params }),
+      providesTags: ["Bookings"],
     }),
     getPrepSheet: build.query<PrepSheet, string>({
       query: (date) => ({ url: "kitchen/prep-sheet/", params: { date } }),
@@ -51,6 +70,7 @@ export const kitchenApi = baseApi.injectEndpoints({
 
 export const {
   useRedeemCouponMutation,
+  useGetAllBookingsQuery,
   useGetPrepSheetQuery,
   useGetAttendanceQuery,
   useGetForecastQuery,
