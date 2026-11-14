@@ -12,6 +12,16 @@ An employee meal booking web app. Employees pre-book canteen meals, the kitchen 
 
 The demo runs on free hosting that sleeps when idle, so the first sign-in can take up to a minute. The demo data is topped up every day.
 
+## Screenshots
+
+| Week view, light | Week view, dark |
+|---|---|
+| ![Week view in light mode](docs/screenshots/week-light.png) | ![Week view in dark mode](docs/screenshots/week-dark.png) |
+
+| Kitchen dashboard | Menu management |
+|---|---|
+| ![Kitchen dashboard with prep sheet, no-shows and forecast](docs/screenshots/kitchen.png) | ![Admin menu management](docs/screenshots/menus-admin.png) |
+
 ## What it does
 
 **Employees**
