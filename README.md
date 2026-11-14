@@ -84,6 +84,11 @@ Run the frontend tests with `npm test`.
 
 The frontend expects the API at `http://127.0.0.1:8000/api/`. To point it elsewhere, copy `frontend/.env.example` to `frontend/.env` and change `VITE_API_URL`.
 
+## Deployment
+
+The live demo runs on free plans (Render, Neon, Cloudinary, Brevo). The steps are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Roadmap
 
 | Stage | Outcome |
