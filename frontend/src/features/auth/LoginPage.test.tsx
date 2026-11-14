@@ -35,7 +35,7 @@ describe("LoginPage", () => {
   });
 
   it("signs in, stores the session and goes to the week view", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_request: RequestInfo | URL) =>
       jsonResponse({ token: { access: "access-1", refresh: "refresh-1" }, msg: "ok" }),
     );
     vi.stubGlobal("fetch", fetchMock);
