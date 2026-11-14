@@ -1,5 +1,6 @@
 """Coupon redemption and the numbers the kitchen plans with."""
 
+import re
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
@@ -12,6 +13,10 @@ REDEEMED = "redeemed"
 ALREADY_REDEEMED = "already_redeemed"
 WRONG_DAY = "wrong_day"
 NOT_FOUND = "not_found"
+
+# The short code people can type: the first eight characters of the coupon.
+SHORT_CODE = re.compile(r"[0-9a-fA-F]{8}")
+SHORT_CODE_SEPARATORS = re.compile(r"[\s-]")
 
 FORECAST_WEEKS = 4
 REDEEMED_FILTER = Q(redeemed_at__isnull=False)
@@ -34,12 +39,34 @@ def claim_booking(booking, staff_user):
     return updated == 1
 
 
+def find_booking(coupon_code):
+    """The booking a scanned or typed code belongs to, or None.
+
+    A scan carries the full coupon code. The code printed under the QR for
+    typing is its first eight characters, which is only looked up among
+    today's bookings: enough to be unique there, and short enough to type.
+    """
+    bookings = Booking.objects.select_related("meal", "user")
+    typed = SHORT_CODE_SEPARATORS.sub("", coupon_code)
+    try:
+        if SHORT_CODE.fullmatch(typed):
+            return bookings.get(date=timezone.localdate(), coupon_code__istartswith=typed)
+        return bookings.get(coupon_code=coupon_code)
+    except (
+        Booking.DoesNotExist,
+        Booking.MultipleObjectsReturned,
+        ValidationError,
+        ValueError,
+    ):
+        # Unknown code, text that is not a coupon code at all, or (in theory)
+        # a short code shared by two of today's bookings: scan the QR instead.
+        return None
+
+
 def redeem_coupon(coupon_code, staff_user):
     """Try to redeem a coupon. Returns (result, booking or None)."""
-    try:
-        booking = Booking.objects.select_related("meal", "user").get(coupon_code=coupon_code)
-    except (Booking.DoesNotExist, ValidationError, ValueError):
-        # Unknown code, or text that is not a coupon code at all.
+    booking = find_booking(coupon_code)
+    if booking is None:
         return NOT_FOUND, None
 
     if booking.is_redeemed:
