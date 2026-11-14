@@ -39,7 +39,12 @@ export default function AppShell() {
         sx={{ bgcolor: "background.paper", borderBottom: 1, borderColor: "divider" }}
       >
         <Container maxWidth="lg">
-          <Toolbar disableGutters sx={{ minHeight: 72, justifyContent: "space-between", flexWrap: "wrap", gap: 2, py: 1 }}>
+          {/* Wide screens: brand, links and profile in one row. Phones: brand and
+              profile on top, with the links in one swipeable row underneath. */}
+          <Toolbar
+            disableGutters
+            sx={{ minHeight: { xs: 56, md: 72 }, flexWrap: "wrap", columnGap: 3, py: { xs: 0.5, md: 1 } }}
+          >
             <Link
               component={NavLink}
               to="/"
@@ -52,7 +57,16 @@ export default function AppShell() {
               direction="row"
               component="nav"
               aria-label="Main"
-              sx={{ alignItems: "center", flexWrap: "wrap", columnGap: 3, rowGap: 1 }}
+              sx={{
+                order: { xs: 3, md: 2 },
+                width: { xs: "100%", md: "auto" },
+                ml: { md: "auto" },
+                alignItems: "center",
+                columnGap: 3,
+                overflowX: "auto",
+                scrollbarWidth: "none",
+                "&::-webkit-scrollbar": { display: "none" },
+              }}
             >
               {links.map((link) => (
                 <Link
@@ -62,6 +76,9 @@ export default function AppShell() {
                   end
                   underline="none"
                   sx={{
+                    flexShrink: 0,
+                    py: 1,
+                    whiteSpace: "nowrap",
                     color: "text.secondary",
                     fontSize: 15,
                     "&.active": { color: "text.primary", fontWeight: 600 },
@@ -70,8 +87,10 @@ export default function AppShell() {
                   {link.label}
                 </Link>
               ))}
-              <ProfileMenu />
             </Stack>
+            <Box sx={{ order: { xs: 2, md: 3 }, ml: { xs: "auto", md: 0 } }}>
+              <ProfileMenu />
+            </Box>
           </Toolbar>
         </Container>
       </AppBar>
