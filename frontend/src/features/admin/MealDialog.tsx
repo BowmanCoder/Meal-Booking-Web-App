@@ -104,12 +104,18 @@ export default function MealDialog({ meal, onClose }: { meal: Meal; onClose: () 
               </TextField>
             </Stack>
 
-            <FormControlLabel
-              sx={{ justifyContent: "space-between", ml: 0 }}
-              labelPlacement="start"
-              label="Offered for booking"
-              control={<Switch checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />}
-            />
+            <Stack spacing={0.5}>
+              <FormControlLabel
+                sx={{ justifyContent: "space-between", ml: 0 }}
+                labelPlacement="start"
+                label="Available to book"
+                control={<Switch checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />}
+              />
+              <Typography variant="body2" color="text.secondary">
+                Switch off to stop offering {meal.name.toLowerCase()} altogether. Employees no longer see it, and
+                existing bookings and history are kept.
+              </Typography>
+            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>

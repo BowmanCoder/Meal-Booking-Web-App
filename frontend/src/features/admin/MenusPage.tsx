@@ -142,7 +142,7 @@ export default function MenusPage() {
               <Stack spacing={1.5}>
                 <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                   <Typography variant="h3">{meal.name}</Typography>
-                  {!meal.is_active && <Chip size="small" label="Not offered" />}
+                  {!meal.is_active && <Chip size="small" label="Not available to book" />}
                 </Stack>
                 <Typography variant="body2" color="text.secondary">
                   Served at {meal.serve_time.slice(0, 5)} on{" "}
