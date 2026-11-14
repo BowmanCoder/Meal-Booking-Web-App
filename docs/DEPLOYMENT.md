@@ -21,6 +21,16 @@ each one is pasted into the dashboard of the service that needs it.
 | `BREVO_API_KEY` | Brevo: SMTP & API, "API keys" |
 | `DEFAULT_FROM_EMAIL` | An address you have verified as a sender in Brevo |
 
+Details that are easy to get wrong:
+
+- `CLOUDINARY_URL` has the form `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`.
+  Cloudinary shows it as a template; replace the placeholders and remove the
+  `<` and `>` around them.
+- Paste values only, without a leading `DATABASE_URL=` or `CLOUDINARY_URL=`.
+- The Brevo key needs one permission, **Transactional email: All**. Brevo keys
+  expire on the date chosen when creating them, and after 90 days without use.
+  If emails stop arriving, check the key first.
+
 ## Render
 
 1. Render dashboard: **New > Blueprint**, pick this repository. Render reads `render.yaml`
@@ -55,5 +65,8 @@ it emails first, and one click re-enables them.
 ## Known limits of the free setup
 
 - The API takes up to a minute to answer after it has been idle.
+- The sender is a free-mail address, which cannot pass the mailbox providers'
+  domain checks, so emails may land in spam. Sending from a domain you own and
+  authenticating it in Brevo fixes this.
 - Mail to the demo accounts (`@example.com`) is never sent. Register with a real
   address to see a password reset or reminder email arrive.
